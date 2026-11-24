@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\src",
+    "\\src\\components",
+    "\\src\\screens",
+    "\\src\\screens\\credit",
+    "\\src\\screens\\dashboard",
+    "\\src\\screens\\profile",
+    "\\src\\screens\\reports",
+    "\\src\\theme",
+    "\\src\\utils"
+  ],
+  "SelectedNode": "\\src\\components\\cards\\CommonListCard.tsx",
+  "PreviewInSolutionExplorer": false
+}

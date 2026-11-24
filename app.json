@@ -1,25 +1,47 @@
 {
   "expo": {
-    "name": "techno_crm_mobile",
-    "slug": "techno_crm_mobile",
+    "name": "Techno CRM",
+    "slug": "techno-crm",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo_icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.technosyncinnovations.ptplcrm"
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
+    "package": "com.technosyncinnovations.ptplcrm",
+    "allowBackup": false,
+    "adaptiveIcon": {
+      "foregroundImage": "./assets/logo_icon.png",
+      "backgroundColor": "#7c3aed"
     },
+    "softwareKeyboardLayoutMode": "resize",
+    "predictiveBackGestureEnabled": false
+  },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "primaryColor": "#7c3aed",
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#7c3aed"
+        }
+      ],
+      "expo-font",
+      "expo-status-bar"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "dc862dc0-dd1c-4d3e-b240-c957d938b0c4"
+      }
+    },
+    "owner": "manasi.technosync"
   }
 }

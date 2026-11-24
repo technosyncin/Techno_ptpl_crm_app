@@ -1,20 +1,41 @@
+import React from 'react';
+import { StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { ErrorBoundary } from './src/components/common/ErrorBoundary';
+import { AuthProvider } from './src/context/AuthContext';
+import { CompanyProvider } from './src/context/CompanyContext';
+import { MenuProvider } from './src/context/MenuContext';
+import { ThemeProvider } from './src/context/ThemeContext';
+import { AppNavigator } from './src/navigation/AppNavigator';
+import { Colors } from './src/theme/colors';
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <AuthProvider>
+            <CompanyProvider>
+              <MenuProvider>
+                <StatusBar style="dark" />
+                <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+                  <AppNavigator />
+                </SafeAreaView>
+              </MenuProvider>
+            </CompanyProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: Colors.surface,
   },
 });
+
+
