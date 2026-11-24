@@ -50,7 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { user } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
 
- const isBackVisible = false;
+  const isBackVisible = false;
 
   const shouldShowCompany = showCompanyBadge && showCompany;
   const companyLabel = isAllCompanies ? 'All Companies' : selectedCompany?.companyName || 'All Companies';
@@ -80,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-<StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" />
       <View style={[styles.wrapper, isTransparent && styles.transparent]}>
         {/* Fixed Top Navbar - 100% Identical to Dashboard across all screens */}
         <View style={styles.topbarContainer}>
@@ -92,12 +92,12 @@ export const Header: React.FC<HeaderProps> = ({
               activeOpacity={0.8}
             >
               <Image
-                source={require('../../../assets/logo_icon.png')}
+                source={require('../../../assets/boldlogo.png')}
                 style={styles.logoIcon}
                 resizeMode="contain"
               />
               <Text style={styles.brandTitle}>
-                Techno <Text style={styles.brandTitleHighlight}>CRM</Text>
+                PTPL <Text style={styles.brandTitleHighlight}>CRM</Text>
               </Text>
             </TouchableOpacity>
           </View>

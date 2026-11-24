@@ -11,15 +11,16 @@
       "bundleIdentifier": "com.technosyncinnovations.ptplcrm"
     },
     "android": {
-    "package": "com.technosyncinnovations.ptplcrm",
-    "allowBackup": false,
-    "adaptiveIcon": {
-      "foregroundImage": "./assets/logo_icon.png",
-      "backgroundColor": "#7c3aed"
+      "package": "com.technosyncinnovations.ptplcrm",
+      "versionCode": 1,
+      "allowBackup": false,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo_icon.png",
+        "backgroundColor": "#7c3aed"
+      },
+      "softwareKeyboardLayoutMode": "resize",
+      "predictiveBackGestureEnabled": false
     },
-    "softwareKeyboardLayoutMode": "resize",
-    "predictiveBackGestureEnabled": false
-  },
     "web": {
       "favicon": "./assets/favicon.png"
     },

@@ -33,7 +33,7 @@ export const setSessionExpiredHandler = (handler: SessionExpiredHandler | null) 
 // ============================================================================
 export type Environment = 'local' | 'test' | 'production';
 
-export const ACTIVE_ENV: Environment = 'local'; // 👈 CHANGE THIS VALUE ('local' | 'test' | 'production')
+export const ACTIVE_ENV: Environment = 'production'; // 👈 CHANGE THIS VALUE ('local' | 'test' | 'production')
 
 export const ENV_ENDPOINTS: Record<Environment, string> = {
   local: 'http://192.168.1.12:5000/api',
@@ -191,21 +191,21 @@ export const initApiBaseUrl = async (): Promise<string> => {
       await SafeStorage.setItem(STORAGE_KEYS.API_BASE_URL, activeUrl);
       await SafeStorage.setItem(STORAGE_KEYS.LAST_ACTIVE_ENV, ACTIVE_ENV);
       await SafeStorage.setItem(STORAGE_KEYS.LAST_ENDPOINT_CONFIG, expectedEndpoint);
-       return currentBaseUrl;
+      return currentBaseUrl;
     }
-     if (savedUrl?.includes('192.168.1.49')) {
-  const updatedUrl = 'http://192.168.1.12:5000/api';
+    if (savedUrl?.includes('192.168.1.49')) {
+      const updatedUrl = 'http://192.168.1.12:5000/api';
 
-  await SafeStorage.setItem(
-    STORAGE_KEYS.API_BASE_URL,
-    updatedUrl
-  );
+      await SafeStorage.setItem(
+        STORAGE_KEYS.API_BASE_URL,
+        updatedUrl
+      );
 
-  currentBaseUrl = updatedUrl;
-  apiClient.defaults.baseURL = currentBaseUrl;
+      currentBaseUrl = updatedUrl;
+      apiClient.defaults.baseURL = currentBaseUrl;
 
-  return currentBaseUrl;
-}
+      return currentBaseUrl;
+    }
     if (savedUrl && savedUrl.trim()) {
       const sanitized = sanitizeApiUrl(savedUrl);
       const resolved = resolveDeviceUrl(sanitized);
@@ -244,8 +244,8 @@ export const getApiBaseUrl = (): string => {
 
 // Request Interceptor: Attach Auth Token, Session Token, and User Headers
 apiClient.interceptors.request.use(
-async (config: InternalAxiosRequestConfig) => {
-     if (config.baseURL && !config.baseURL.endsWith('/')) {
+  async (config: InternalAxiosRequestConfig) => {
+    if (config.baseURL && !config.baseURL.endsWith('/')) {
       config.baseURL = `${config.baseURL}/`;
     }
     if (config.url?.startsWith('/')) {
