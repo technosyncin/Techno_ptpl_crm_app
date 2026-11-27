@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -296,8 +297,33 @@ export const SalesFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
   useFocusEffect(
     useCallback(() => {
       fetchBacklog();
+
+      return () => {
+        // When switching tabs or leaving this screen, reset customer detail so returning shows fresh backlog
+        setSelectedCustomer(null);
+        setCustomerHistory([]);
+      };
     }, [fetchBacklog])
   );
+
+  // Tab press & navigation blur listeners for instant reset and refresh
+  useEffect(() => {
+    const unsubscribeTabPress = navigation?.addListener?.('tabPress', () => {
+      setSelectedCustomer(null);
+      setCustomerHistory([]);
+      fetchBacklog();
+    });
+
+    const unsubscribeBlur = navigation?.addListener?.('blur', () => {
+      setSelectedCustomer(null);
+      setCustomerHistory([]);
+    });
+
+    return () => {
+      if (unsubscribeTabPress) unsubscribeTabPress();
+      if (unsubscribeBlur) unsubscribeBlur();
+    };
+  }, [navigation, fetchBacklog]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -340,10 +366,12 @@ export const SalesFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
       ? customer.source 
       : (sourceId != null ? (sourceNames[String(sourceId)] || null) : null);
 
+    const targetLeadId = Number(customer.leadID || (customer as any).LeadID || (customer as any).leadId || (customer as any).id || 0);
+
     if (!sourceName || sourceName === '-' || sourceId === null) {
       try {
-        if (customer.leadID) {
-          const leadDetail = await leadService.getLeadById(customer.leadID);
+        if (targetLeadId > 0) {
+          const leadDetail = await leadService.getLeadById(targetLeadId, customer.companyID ?? selectedCompanyId ?? undefined);
           if (leadDetail) {
             const fetchedData: any = leadDetail;
             sourceId = fetchedData.leadSourceID ?? fetchedData.LeadSourceID ?? sourceId;
@@ -361,6 +389,7 @@ export const SalesFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
 
     const updatedCustomer: SalesFollowUp = {
       ...customer,
+      leadID: targetLeadId > 0 ? targetLeadId : customer.leadID,
       leadSourceID: sourceId,
       leadSourceName: sourceName || 'Direct',
       source: sourceName || 'Direct',
@@ -369,8 +398,8 @@ export const SalesFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
     setSelectedCustomer(updatedCustomer);
     setActiveTab('All');
     setHistoryDateFilterMode('All');
-    if (customer.leadID) {
-      fetchHistory(customer.leadID);
+    if (targetLeadId > 0) {
+      fetchHistory(targetLeadId);
     }
   };
 
@@ -378,6 +407,20 @@ export const SalesFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
     setSelectedCustomer(null);
     setCustomerHistory([]);
   };
+
+  // Hardware back button handling
+  useEffect(() => {
+    const handleBack = () => {
+      if (selectedCustomer) {
+        handleBackToBacklog();
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => subscription.remove();
+  }, [selectedCustomer]);
 
   // Date Calculation Helpers (Exact Web Parity)
   const getLocalTodayStr = () => {
@@ -783,7 +826,7 @@ export const SalesFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
 
             return (
               <CommonListCard
-                key={String(item.followUpID || item.leadID || idx)}
+                key={`sales-card-${item.followUpID || item.leadID || ''}-${idx}`}
                 title={name}
                 subtitle={item.companyName || undefined}
                 avatarText={initials}
@@ -910,10 +953,6 @@ export const SalesFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
         {/* Customer Header Card */}
         <View style={styles.customerHeaderCard}>
           <View style={styles.customerHeaderTopRow}>
-            <TouchableOpacity onPress={handleBackToBacklog} style={styles.backToBacklogBtn} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={18} color="#645695" />
-            </TouchableOpacity>
-
             <View style={styles.customerHeaderAvatar}>
               <Text style={styles.customerHeaderAvatarText}>{name.substring(0, 2).toUpperCase()}</Text>
             </View>
@@ -1053,13 +1092,13 @@ export const SalesFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
           </View>
         ) : (
           <View style={styles.cleanHistoryList}>
-            {filteredHistory.map((item) => {
+            {filteredHistory.map((item, idx) => {
               const typeTheme = getFollowUpTypeTheme(item.followUpType);
               const outcomeTheme = getOutcomeTheme(item.outcome);
               const isCompleted = (item.status || '').toLowerCase() === 'completed';
 
               return (
-                <View key={String(item.followUpID)} style={styles.cleanHistoryCard}>
+                <View key={`hist-${item.followUpID || ''}-${idx}`} style={styles.cleanHistoryCard}>
                   {/* Card Header Row */}
                   <View style={styles.cleanCardHeader}>
                     <View style={[styles.cleanTypeIconCircle, { backgroundColor: typeTheme.bg, borderColor: typeTheme.border }]}>

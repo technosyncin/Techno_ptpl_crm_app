@@ -41,7 +41,10 @@ interface MyTasksScreenProps {
 
 export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ navigation, route }) => {
   const { user } = useAuth();
-  const { selectedCompanyId } = useCompany();
+  const { selectedCompanyId, isAllCompanies } = useCompany();
+  const userRole = (user?.role || '').toLowerCase();
+  const isAdmin = userRole.includes('admin') || userRole.includes('super');
+  const userId = Number(user?.id || user?.userID);
 
   // Screen View Mode: false = List View, true = Full-Screen Form (NO MODAL)
   const [showForm, setShowForm] = useState(
@@ -106,9 +109,10 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ navigation, route 
   const loadLookups = useCallback(async () => {
     setLoadingLookups(true);
     try {
+      const activeComp = isAllCompanies ? 0 : Number(selectedCompanyId || 0);
       const [leadsRes, usersRes] = await Promise.allSettled([
-        leadService.getLeads({ pageSize: 500 }),
-        mastersService.getUsers(),
+        leadService.getLeads({ companyId: activeComp, pageSize: 500 }),
+        mastersService.getUsers(activeComp > 0 ? activeComp : undefined),
       ]);
 
       if (leadsRes.status === 'fulfilled' && leadsRes.value?.data) {
@@ -127,47 +131,60 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ navigation, route 
     } finally {
       setLoadingLookups(false);
     }
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, isAllCompanies]);
 
-  // Fetch Tasks List (Strictly for the Logged-in User)
+  // Fetch Tasks List (Filtered by Company and Role: Admin = All, User = CreatedBy / AssignedTo)
   const fetchTasks = useCallback(
     async (isRefresh = false) => {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
 
       try {
+        const targetCompanyId = isAllCompanies ? 0 : Number(selectedCompanyId || 0);
         const userIdentifier = user?.username || user?.fullName || (user?.id ? String(user.id) : '');
         const res = await taskService.getTasks({
-          assignedTo: userIdentifier || undefined,
-          companyId: selectedCompanyId || undefined,
+          assignedTo: !isAdmin && userIdentifier ? userIdentifier : undefined,
+          companyId: targetCompanyId > 0 ? targetCompanyId : undefined,
           search: search.trim() || undefined,
           limit: 1000,
         });
 
-        // Strict Client-side Filter to ensure ONLY tasks assigned to this user are shown
-        const currentUid = String(user?.id || user?.userID || '').toLowerCase().trim();
-        const currentUname = String(user?.username || '').toLowerCase().trim();
-        const currentFname = String(user?.fullName || '').toLowerCase().trim();
+        let list = res || [];
 
-        const myTasksOnly = (res || []).filter((t: Task) => {
-          const assigned = String(t.assignedTo || '').toLowerCase().trim();
-          const created = String((t as any).createdBy || '').toLowerCase().trim();
+        // 1. Company filter
+        if (!isAllCompanies && targetCompanyId > 0) {
+          list = list.filter((t: any) => {
+            const compId = Number(t.companyID ?? t.companyId ?? 0);
+            return compId === 0 || compId === targetCompanyId;
+          });
+        }
 
-          const matchesAssignee =
-            (currentUid && assigned === currentUid) ||
-            (currentUname && assigned === currentUname) ||
-            (currentFname && assigned === currentFname) ||
-            (currentUname && assigned.includes(currentUname)) ||
-            (currentFname && assigned.includes(currentFname));
+        // 2. Role filter: Admin = all access, User = createdBy / assignedTo wise
+        if (!isAdmin && userId) {
+          const currentUid = String(userId).toLowerCase().trim();
+          const currentUname = String(user?.username || '').toLowerCase().trim();
+          const currentFname = String(user?.fullName || '').toLowerCase().trim();
 
-          const matchesCreator =
-            (currentUid && created === currentUid) ||
-            (currentUname && created === currentUname);
+          list = list.filter((t: Task) => {
+            const assigned = String(t.assignedTo || '').toLowerCase().trim();
+            const created = String((t as any).createdBy || (t as any).createdByUserID || (t as any).createdById || '').toLowerCase().trim();
 
-          return matchesAssignee || matchesCreator;
-        });
+            const matchesAssignee =
+              (currentUid && assigned === currentUid) ||
+              (currentUname && assigned === currentUname) ||
+              (currentFname && assigned === currentFname) ||
+              (currentUname && assigned.includes(currentUname)) ||
+              (currentFname && assigned.includes(currentFname));
 
-        setTasks(myTasksOnly);
+            const matchesCreator =
+              (currentUid && created === currentUid) ||
+              (currentUname && created === currentUname);
+
+            return matchesAssignee || matchesCreator;
+          });
+        }
+
+        setTasks(list);
       } catch (e) {
         console.warn('Error fetching tasks:', e);
       } finally {
@@ -175,7 +192,7 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ navigation, route 
         setRefreshing(false);
       }
     },
-    [search, user, selectedCompanyId]
+    [search, user, selectedCompanyId, isAllCompanies, isAdmin, userId]
   );
 
   useEffect(() => {
@@ -298,6 +315,8 @@ export const MyTasksScreen: React.FC<MyTasksScreenProps> = ({ navigation, route 
         status: isCompleted ? 'Completed' : 'Pending',
         taskStatus: isCompleted ? 1 : 0,
         companyID: selectedCompanyId || 1,
+        createdBy: userId || 1,
+        createdByUserID: userId || 1,
       };
 
       if (isEditing && editingTask) {

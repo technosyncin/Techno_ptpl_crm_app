@@ -26,6 +26,7 @@ import { ConfirmationModal } from '../../components/common/ConfirmationModal';
 import { Pagination } from '../../components/common/Pagination';
 import { creditService } from '../../api/creditService';
 import { leadService } from '../../api/leadService';
+import { mastersService } from '../../api/mastersService';
 import { useCompany } from '../../context/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 import { Colors } from '../../theme/colors';
@@ -38,6 +39,7 @@ interface NewTransactionScreenProps {
 export interface TransactionItem {
   id: number;
   docType: string;
+  objType?: number;
   leadID: number;
   leadName: string;
   documentDate: string;
@@ -60,7 +62,20 @@ export interface DocTypeCard {
   color: string;
   targetDocType: string;
   prefix: string;
+  objType: number;
 }
+
+// Maps docType or ID to Web CRM ObjType
+export const getObjTypeForDoc = (docTypeOrId?: string): number => {
+  const t = (docTypeOrId || '').toLowerCase().trim();
+  if (t.includes('invoice')) return 1;
+  if (t.includes('return')) return 2;
+  if (t.includes('incoming') || t === 'receipt') return 3;
+  if (t.includes('outgoing') || t === 'payment') return 4;
+  if (t.includes('quotation')) return 5;
+  if (t.includes('journal')) return 6;
+  return 1;
+};
 
 const DOC_TYPES: DocTypeCard[] = [
   {
@@ -71,6 +86,7 @@ const DOC_TYPES: DocTypeCard[] = [
     color: '#1a419b',
     targetDocType: 'Sales Invoice',
     prefix: 'INV',
+    objType: 1,
   },
   {
     id: 'SalesReturn',
@@ -80,6 +96,7 @@ const DOC_TYPES: DocTypeCard[] = [
     color: '#20c997',
     targetDocType: 'Sales Return',
     prefix: 'RET',
+    objType: 2,
   },
   {
     id: 'JournalEntry',
@@ -89,6 +106,7 @@ const DOC_TYPES: DocTypeCard[] = [
     color: '#6f42c1',
     targetDocType: 'Journal Entry',
     prefix: 'JE',
+    objType: 6,
   },
   {
     id: 'PaymentIncoming',
@@ -98,6 +116,7 @@ const DOC_TYPES: DocTypeCard[] = [
     color: '#198754',
     targetDocType: 'Payment Incoming',
     prefix: 'RCP',
+    objType: 3,
   },
   {
     id: 'PaymentOutgoing',
@@ -107,6 +126,7 @@ const DOC_TYPES: DocTypeCard[] = [
     color: '#dc3545',
     targetDocType: 'Payment Outgoing',
     prefix: 'PAY',
+    objType: 4,
   },
 ];
 
@@ -174,6 +194,37 @@ const {selectedCompanyId,isCompaniesInitialized,} = useCompany();  const { user 
   const [deleteModalVisible, setDeleteModalVisible] = useState<boolean>(false);
   const [selectedForDelete, setSelectedForDelete] = useState<TransactionItem | null>(null);
   const [deleting, setDeleting] = useState<boolean>(false);
+
+  // Dynamic ObjTypes directly fetched from database Menu table (/Menu/by-parent/60)
+  const [menuObjTypes, setMenuObjTypes] = useState<Record<string, number>>({});
+
+  const loadMenuTableDocTypes = useCallback(async () => {
+    try {
+      const list = await mastersService.getMenuDocTypes(60);
+      if (list && list.length > 0) {
+        const typeMap: Record<string, number> = {};
+        list.forEach((item) => {
+          const oType = Number(item.objType);
+          if (oType > 0) {
+            const n = item.menuName.toLowerCase().trim();
+            typeMap[n] = oType;
+            if (n.includes('invoice')) typeMap['invoice'] = oType;
+            if (n.includes('return')) typeMap['sales return'] = oType;
+            if (n.includes('journal')) typeMap['journal entry'] = oType;
+            if (n.includes('receipt') || n.includes('incoming')) typeMap['receipt'] = oType;
+            if (n.includes('payment') || n.includes('outgoing')) typeMap['payment'] = oType;
+          }
+        });
+        setMenuObjTypes(typeMap);
+      }
+    } catch (e) {
+      console.warn('Error loading doc types from Menu table:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMenuTableDocTypes();
+  }, [loadMenuTableDocTypes]);
 
   // Helper: Calculate Due Date from Document Date + Credit Days
   const calcDueDate = (baseDate: string, daysStr: string): string => {
@@ -414,7 +465,7 @@ useEffect(() => {
   };
 
   // Open Edit Mode
-  const openEditTransaction = (item: TransactionItem) => {
+  const openEditTransaction = async (item: TransactionItem) => {
     let config = DOC_TYPES.find((c) =>
       item.docType.toLowerCase().includes(c.id.toLowerCase()) ||
       item.docType.toLowerCase().includes(c.label.toLowerCase())
@@ -431,7 +482,11 @@ useEffect(() => {
     setSelectedType(config.id);
     setEditingTransaction(item);
     setSelectedLeadId(item.leadID || '');
-    setSelectedLeadName(item.leadName || '');
+    const resolvedLeadName =
+      !item.leadName || item.leadName.trim() === '' || item.leadName.trim().toLowerCase() === 'lead'
+        ? leadOptions.find((o) => String(o.value) === String(item.leadID))?.label || item.leadName || ''
+        : item.leadName;
+    setSelectedLeadName(resolvedLeadName);
     setDocumentDate(item.documentDate || new Date().toISOString().split('T')[0]);
     setDueDate(item.dueDate || item.documentDate || new Date().toISOString().split('T')[0]);
     setCreditDays('0');
@@ -442,8 +497,38 @@ useEffect(() => {
     setStatus(item.status || 'Open');
     setRemark(item.remark || '');
     setErrors({});
+    setSelectedAttachment(null);
 
     setShowForm(true);
+
+    // Fetch and bind uploaded attachment for this transaction (all doc types: Invoice, Return, Journal, Receipt, Payment)
+    try {
+      const docTarget = (config.targetDocType || config.label || '').toLowerCase().trim();
+      const objType =
+        (item as any).objType ||
+        menuObjTypes[docTarget] ||
+        menuObjTypes[config.id.toLowerCase()] ||
+        config.objType ||
+        getObjTypeForDoc(item.docType || config.id);
+
+      const attachments = await creditService.getTransactionAttachments(objType, Number(item.id));
+      if (attachments && attachments.length > 0) {
+        const att = attachments[0];
+        setSelectedAttachment({
+          name: att.fileName || att.name || 'Attachment',
+          fileName: att.fileName || att.name || 'Attachment',
+          fileSize: att.fileSize || att.size || 0,
+          size: att.fileSize || att.size || 0,
+          extension: att.extension || '',
+          attachmentId: att.attachmentId || att.srNo || att.id,
+          documentId: Number(item.id),
+          objType: att.objType || objType,
+          isExisting: true,
+        });
+      }
+    } catch (e) {
+      console.warn('Could not load existing attachment:', e);
+    }
   };
 
   // Reset Form Fields
@@ -515,9 +600,17 @@ const handleSaveTransaction = async () => {
       : (user?.defaultCompanyId ? Number(user.defaultCompanyId) : 1);
 
     const parsedAmt = parseFloat(documentAmount) || 0;
+    const docTarget = (activeDocConfig.targetDocType || activeDocConfig.label || '').toLowerCase().trim();
+    // Dynamic ObjType resolved directly from database Menu table (/Menu/by-parent/60)
+    const currentObjType =
+      menuObjTypes[docTarget] ||
+      menuObjTypes[activeDocConfig.id.toLowerCase()] ||
+      activeDocConfig.objType ||
+      getObjTypeForDoc(activeDocConfig.targetDocType || activeDocConfig.id);
 
     const payload: any = {
       docType: activeDocConfig.targetDocType || activeDocConfig.label,
+      objType: currentObjType, // Dynamic ObjType from database Menu table
       leadID: Number(selectedLeadId) || 0,
       leadName: selectedLeadName.trim(),
       documentDate: documentDate,
@@ -564,8 +657,8 @@ const handleSaveTransaction = async () => {
       );
     }
 
-    // Upload attachment after transaction is saved
-    if (selectedAttachment && activeDocConfig.id === 'Invoice') {
+    // Upload attachment after transaction is saved (only if a new file was chosen)
+    if (selectedAttachment && !selectedAttachment.isExisting) {
       if (!documentId) {
         throw new Error(
           'Transaction saved, but document ID was not returned. Attachment could not be uploaded.'
@@ -573,7 +666,7 @@ const handleSaveTransaction = async () => {
       }
 
       await creditService.uploadTransactionAttachment(
-        1, // Invoice ObjType
+        currentObjType, // Dynamic ObjType (1: Invoice, 2: Return, 3: Incoming, 4: Outgoing, 6: Journal)
         documentId,
         selectedAttachment
       );
@@ -812,7 +905,9 @@ const handleSaveTransaction = async () => {
                   <Ionicons name="attach-outline" size={20} color={Colors.primary} />
 
                   <Text style={styles.attachmentInputText} numberOfLines={1}>
-                    {selectedAttachment?.name || 'Choose Attachment'}
+                    {selectedAttachment
+                      ? `${selectedAttachment.name || selectedAttachment.fileName || 'Attachment'}${selectedAttachment.isExisting ? ' (Uploaded)' : ''}`
+                      : 'Choose Attachment'}
                   </Text>
 
                   <Ionicons name="folder-open-outline" size={18} color={Colors.primary} />
@@ -1039,7 +1134,9 @@ const handleSaveTransaction = async () => {
                     <View style={styles.txRow}>
                       <Ionicons name="person-circle-outline" size={16} color={Colors.slate500} />
                       <Text style={styles.leadNameText} numberOfLines={1}>
-                        {item.leadName || 'Unnamed Lead'}
+                        {!item.leadName || item.leadName.trim() === '' || item.leadName.trim().toLowerCase() === 'lead'
+                          ? leadOptions.find((o) => String(o.value) === String(item.leadID))?.label || item.leadName || 'Unnamed Lead'
+                          : item.leadName}
                       </Text>
                     </View>
 

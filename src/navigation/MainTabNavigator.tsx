@@ -34,11 +34,11 @@ export const MainTabNavigator = () => {
   const userCompanyIds = Array.isArray(userAny?.companyIds) ? userAny.companyIds : [];
   const hasCompanyAssigned = isAdmin || (companies && companies.length > 0) || userCompanyIds.length > 0;
 
-  const showDashboard = hasCompanyAssigned && (isAdmin || canAccessDashboard);
-  const showSales = hasCompanyAssigned && (isAdmin || canAccessSales);
-  const showCredit = hasCompanyAssigned && (isAdmin || canAccessCredit);
-  const showReports = hasCompanyAssigned && (isAdmin || canAccessReports);
-  const showMore = hasCompanyAssigned && (isAdmin || canAccessMore);
+  const showDashboard = hasCompanyAssigned && canAccessDashboard;
+  const showSales = hasCompanyAssigned && canAccessSales;
+  const showCredit = hasCompanyAssigned && canAccessCredit;
+  const showReports = hasCompanyAssigned && canAccessReports;
+  const showMore = hasCompanyAssigned && canAccessMore;
 
   const hasAnyAccess = hasCompanyAssigned && (showDashboard || showSales || showCredit || showReports || showMore);
 

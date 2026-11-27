@@ -27,9 +27,10 @@ export interface ReminderItem {
 
 export const reminderService = {
   // GET ALL REMINDERS
-  getAllReminders: async (_companyId?: number): Promise<ReminderItem[]> => {
+  getAllReminders: async (companyId?: number): Promise<ReminderItem[]> => {
     try {
-      const response = await apiClient.get('/Reminder');
+      const params = companyId ? { companyId } : {};
+      const response = await apiClient.get('/Reminder', { params });
 
       if (response && response.data) {
         if (Array.isArray(response.data)) {

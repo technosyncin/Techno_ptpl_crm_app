@@ -233,6 +233,38 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
     }
   }, []);
 
+  // Dynamic ObjTypes for Receipts & Payments directly from database Menu table (/Menu/by-parent/60)
+  const [dbObjTypes, setDbObjTypes] = useState<{ incoming: number; outgoing: number }>({
+    incoming: PAYMENT_TYPE_CONFIG.incoming.objType,
+    outgoing: PAYMENT_TYPE_CONFIG.outgoing.objType,
+  });
+
+  const fetchMenuObjTypes = useCallback(async () => {
+    try {
+      const list = await mastersService.getMenuDocTypes(60);
+      if (list && list.length > 0) {
+        let inc = 0;
+        let out = 0;
+        list.forEach((item) => {
+          const n = item.menuName.toLowerCase().trim();
+          const o = Number(item.objType);
+          if (o > 0) {
+            if (n.includes('receipt') || n.includes('incoming')) inc = o;
+            if (n.includes('payment') || n.includes('outgoing')) out = o;
+          }
+        });
+        if (inc > 0 || out > 0) {
+          setDbObjTypes((prev) => ({
+            incoming: inc > 0 ? inc : prev.incoming,
+            outgoing: out > 0 ? out : prev.outgoing,
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching Menu ObjTypes from database Menu table:', err);
+    }
+  }, []);
+
   // 2. Fetch Receipts / Payments list
   const fetchReceipts = useCallback(async () => {
     setLoading(true);
@@ -251,7 +283,7 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
     setLoadingLeads(true);
     try {
       const res = await leadService.getLeads({
-        companyId: selectedCompanyId ? Number(selectedCompanyId) : undefined,
+        companyId: (selectedCompanyId ? Number(selectedCompanyId) : undefined) as any,
         pageSize: 500,
       });
       setLeadsList(res.data || []);
@@ -285,7 +317,8 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
     fetchReceipts();
     fetchPaymentModes();
     fetchLeads();
-  }, [fetchReceipts, fetchPaymentModes, fetchLeads]);
+    fetchMenuObjTypes();
+  }, [fetchReceipts, fetchPaymentModes, fetchLeads, fetchMenuObjTypes]);
 
   // Handle route params redirection (autoOpen from New Transaction or route params)
   useFocusEffect(
@@ -591,6 +624,8 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
     setSaving(true);
     try {
       const typeConfig = PAYMENT_TYPE_CONFIG[paymentType];
+      // Dynamic ObjType directly from database Menu table
+      const activeObjType = paymentType === 'outgoing' ? dbObjTypes.outgoing : dbObjTypes.incoming;
       const autoRef =
         referenceNumber.trim() || `${typeConfig.prefix}-${Date.now().toString().slice(-6)}`;
       const activeCompanyId = selectedCompanyId ? Number(selectedCompanyId) : (selectedLead?.companyID || 1);
@@ -627,7 +662,7 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
           companyID: activeCompanyId,
           leadName: leadNameToUse,
           status: Math.abs(rawPendAmt) - allocatedAmount <= 0.01 ? 'Closed' : 'Open',
-          objType: typeConfig.objType,
+          objType: activeObjType,
         };
       });
 
@@ -636,7 +671,7 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
         paymentType === 'outgoing'
           ? documentsData.map((d: any) => ({
               ...d,
-              objType: 4,
+              objType: dbObjTypes.outgoing,
             }))
           : [];
 
@@ -654,7 +689,7 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
                 appliedamt: 0,
                 status: 'Open',
                 remark: description || 'On Account Amount',
-                objType: 4,
+                objType: dbObjTypes.outgoing,
                 companyID: activeCompanyId,
               },
             ]
@@ -681,7 +716,7 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
         remarks: description.trim() || undefined,
         status: 'Completed',
         paymentType: paymentType,
-        objType: typeConfig.objType,
+        objType: activeObjType,
         documents: documentsData,
         outgoingPaymentRows,
         outgoingPaymentOnAccount,
@@ -726,10 +761,10 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
   const isItemOutgoing = useCallback((r: any): boolean => {
     if (!r) return false;
     if (r.paymentType === 'outgoing' || r.paymentType === 'Payment') return true;
-    if (r.objType === 4) return true;
+    if (r.objType === dbObjTypes.outgoing || r.objType === PAYMENT_TYPE_CONFIG.outgoing.objType) return true;
     const no = (r.receiptNo || r.referenceNo || r.referenceNumber || '').toUpperCase();
     return no.startsWith('PAY');
-  }, []);
+  }, [dbObjTypes.outgoing]);
 
   // Delete Receipt or Payment Record
   const handleDeleteReceipt = async () => {
@@ -1129,7 +1164,7 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
                   </View>
                 ) : (
                   <View style={styles.openDocsList}>
-                    {openDocuments.map((doc) => {
+                    {openDocuments.map((doc, idx) => {
                       const isSelected = selectedDocuments.some(
                         (d) => String(d.documentID) === String(doc.documentID)
                       );
@@ -1151,7 +1186,7 @@ export const ReceiptsScreen: React.FC<ReceiptsScreenProps> = ({ route, navigatio
 
                       return (
                         <View
-                          key={String(doc.documentID)}
+                          key={`rcpt-doc-${doc.documentID || ''}-${idx}`}
                           style={[
                             styles.docRowCard,
                             isSelected && styles.docRowCardActive,

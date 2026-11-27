@@ -308,7 +308,7 @@ export const CreditFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
       setLoadingLeads(true);
       let leadsArr: any[] = [];
       try {
-        const leadsRes = await leadService.getLeads({ companyId: compId, pageSize: 500 });
+        const leadsRes = await leadService.getLeads({ companyId: compId as any, pageSize: 500 });
         leadsArr = leadsRes?.data || [];
       leadsArr.find((l: any) =>
         Number(l.leadID ?? l.LeadID) === 4979
@@ -835,8 +835,42 @@ export const CreditFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
   useFocusEffect(
     useCallback(() => {
       fetchBacklog();
+
+      return () => {
+        // When switching tabs or leaving this screen, reset customer detail so returning shows fresh backlog
+        setSelectedCustomer(null);
+        setCustomerHistory([]);
+        setCustomerReceipts([]);
+        setSalesFollowUps([]);
+        setCustomerDetailSearch('');
+      };
     }, [fetchBacklog])
   );
+
+  // Tab press & navigation blur listeners for instant reset and refresh
+  useEffect(() => {
+    const unsubscribeTabPress = navigation?.addListener?.('tabPress', () => {
+      setSelectedCustomer(null);
+      setCustomerHistory([]);
+      setCustomerReceipts([]);
+      setSalesFollowUps([]);
+      setCustomerDetailSearch('');
+      fetchBacklog();
+    });
+
+    const unsubscribeBlur = navigation?.addListener?.('blur', () => {
+      setSelectedCustomer(null);
+      setCustomerHistory([]);
+      setCustomerReceipts([]);
+      setSalesFollowUps([]);
+      setCustomerDetailSearch('');
+    });
+
+    return () => {
+      if (unsubscribeTabPress) unsubscribeTabPress();
+      if (unsubscribeBlur) unsubscribeBlur();
+    };
+  }, [navigation, fetchBacklog]);
 
   // ✅ Hardware back button handling
   useEffect(() => {
@@ -1326,7 +1360,7 @@ export const CreditFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
             return (
                
 <CommonListCard
-  key={String(item.id || item.leadId || idx)}
+  key={`cr-backlog-${item.id || item.leadId || ''}-${idx}`}
   title={name}
   subtitle={item.companyName || undefined}
   avatarText={initials}
@@ -1491,10 +1525,6 @@ export const CreditFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
         {/* Customer Header Card */}
         <View style={styles.customerHeaderCard}>
           <View style={styles.customerHeaderTopRow}>
-            <TouchableOpacity onPress={handleBackToBacklog} style={styles.backToBacklogBtn} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={18} color="#645695" />
-            </TouchableOpacity>
-
             <View style={styles.customerHeaderAvatar}>
               <Text style={styles.customerHeaderAvatarText}>{name.substring(0, 2).toUpperCase()}</Text>
             </View>
@@ -1849,13 +1879,13 @@ export const CreditFollowUpScreen: React.FC<any> = ({ navigation, route }) => {
             </View>
           ) : (
             <View style={styles.cleanHistoryList}>
-              {filteredHistory.map((item) => {
+              {filteredHistory.map((item, idx) => {
                 const typeTheme = getFollowUpTypeTheme(item.followUpType);
                 const outcomeTheme = getOutcomeTheme(item.outcome);
                 const isCompleted = (item.status || '').toLowerCase() === 'completed';
 
                 return (
-                  <View key={String(item.followUpID)} style={styles.cleanHistoryCard}>
+                  <View key={`cr-hist-${item.followUpID || ''}-${idx}`} style={styles.cleanHistoryCard}>
                     {/* Card Header Row */}
                     <View style={styles.cleanCardHeader}>
                       <View

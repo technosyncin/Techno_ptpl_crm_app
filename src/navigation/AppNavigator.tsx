@@ -18,9 +18,8 @@ import { VisitReportScreen } from '../screens/reports/VisitReportScreen';
 import { UserProfileScreen } from '../screens/profile/UserProfileScreen';
 import { AddCompanyScreen } from '../screens/company/AddCompanyScreen';
 import { CompaniesListScreen } from '../screens/company/CompaniesListScreen';
-import { AddUserScreen } from '../screens/user/AddUserScreen';
-import { UsersListScreen } from '../screens/user/UsersListScreen';
-import { UserPermissionScreen } from '../screens/user/UserPermissionScreen';
+ import { UsersListScreen } from '../screens/user/UsersListScreen';
+import { UserMasterScreen } from '../screens/user/UserMasterScreen';
 import { InternalChatScreen } from '../screens/chat/InternalChatScreen';
 import { ActivitiesScreen } from '../screens/activities/ActivitiesScreen';
 import { ContactsListScreen } from '../screens/contacts/ContactsListScreen';
@@ -73,9 +72,8 @@ export const AppNavigator = () => {
       <Stack.Screen name="CompaniesList" component={CompaniesListScreen} />
       <Stack.Screen name="AddCompany" component={AddCompanyScreen} />
       <Stack.Screen name="UsersList" component={UsersListScreen} />
-      <Stack.Screen name="AddUser" component={AddUserScreen} />
-      <Stack.Screen name="UserPermission" component={UserPermissionScreen} />
-      <Stack.Screen name="Reminder" component={ReminderScreen} />
+      <Stack.Screen name="AddUser" component={UserMasterScreen} />
+       <Stack.Screen name="Reminder" component={ReminderScreen} />
       <Stack.Screen name="Activities" component={ActivitiesScreen} />
       <Stack.Screen name="Contacts" component={ContactsListScreen} />
       <Stack.Screen name="LeadsList" component={LeadsListScreen} />

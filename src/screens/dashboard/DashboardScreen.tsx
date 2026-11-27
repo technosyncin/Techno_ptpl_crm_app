@@ -23,12 +23,61 @@ import { creditService, CreditDashboardMetrics, CreditFollowUp, CreditCustomer }
 import { leadService, Lead } from '../../api/leadService';
 import { messagingService } from '../../api/messagingService';
 import { Linking } from 'react-native';
-
+import { userPermissionService } from '../../api/userPermissionService';
 import { useMenu } from '../../context/MenuContext';
 
 interface DashboardScreenProps {
   navigation: any;
 }
+
+interface QuickActionItem {
+  id: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  bgColor: string;
+  screen: string;
+  matchPatterns: string[];
+}
+
+const DASHBOARD_QUICK_ACTIONS: QuickActionItem[] = [
+  {
+    id: 'mytask',
+    label: 'My Task',
+    icon: 'checkbox-outline',
+    iconColor: '#645695',
+    bgColor: 'rgba(100, 86, 149, 0.12)',
+    screen: 'MyTasks',
+    matchPatterns: ['my task', 'mytask', 'task'],
+  },
+  {
+    id: 'notes',
+    label: 'Notes',
+    icon: 'document-text-outline',
+    iconColor: '#d97706',
+    bgColor: '#fef3c7',
+    screen: 'Notes',
+    matchPatterns: ['notes', 'note'],
+  },
+  {
+    id: 'inbox',
+    label: 'CRM Inbox',
+    icon: 'chatbubbles-outline',
+    iconColor: '#16a34a',
+    bgColor: '#dcfce7',
+    screen: 'InternalChat',
+    matchPatterns: ['crm inbox', 'inbox', 'chat'],
+  },
+  {
+    id: 'reminder',
+    label: 'Reminder',
+    icon: 'alarm-outline',
+    iconColor: '#7c3aed',
+    bgColor: '#ede9fe',
+    screen: 'Reminder',
+    matchPatterns: ['reminder', 'remainder'],
+  },
+];
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
   const { user, logout } = useAuth();
@@ -54,10 +103,64 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
   const [followUps, setFollowUps] = useState<SalesFollowUp[]>([]);
   const [creditFollowUps, setCreditFollowUps] = useState<CreditFollowUp[]>([]);
   const [creditCustomers, setCreditCustomers] = useState<CreditCustomer[]>([]);
+  const [dynamicQuickActions, setDynamicQuickActions] = useState<QuickActionItem[]>([]);
 
   const userRole = (user?.role || '').toLowerCase();
   const isAdmin = userRole.includes('admin') || userRole.includes('super');
   const userId = Number(user?.id || user?.userID);
+
+  // Dynamic Loader: Loads dashboard quick actions strictly based on live database permissions
+  const loadDashboardActions = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await userPermissionService.getUserPermissions(userId);
+      if (res && res.menus) {
+        interface FlatItem {
+          name: string;
+          action: string;
+          auth: boolean;
+        }
+        const flatItems: FlatItem[] = [];
+        res.menus.forEach((parent) => {
+          flatItems.push({
+            name: (parent.menuName || '').toLowerCase().trim(),
+            action: (parent.action || '').toLowerCase().trim(),
+            auth: !!parent.auth,
+          });
+          parent.children?.forEach((child) => {
+            flatItems.push({
+              name: (child.menuName || '').toLowerCase().trim(),
+              action: (child.action || '').toLowerCase().trim(),
+              auth: !!child.auth,
+            });
+          });
+        });
+
+        // Strictly verify permission based on auth in database
+        // If permission is removed in Web CRM (auth === false), it will NOT be visible!
+        const authorizedActions = DASHBOARD_QUICK_ACTIONS.filter((action) => {
+          const match = flatItems.find((item) =>
+            action.matchPatterns.some(
+              (pattern) => item.name.includes(pattern) || item.action.includes(pattern)
+            )
+          );
+
+          if (match) {
+            return match.auth === true;
+          }
+
+          return false;
+        });
+
+        setDynamicQuickActions(authorizedActions);
+      } else {
+        setDynamicQuickActions([]);
+      }
+    } catch (err) {
+      console.warn('Error loading dynamic dashboard actions:', err);
+      setDynamicQuickActions([]);
+    }
+  }, [userId, isAdmin]);
 
   const userAny = user as any;
   const userCompanyIds = Array.isArray(userAny?.companyIds) ? userAny.companyIds : [];
@@ -91,13 +194,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
 
       // Filter leads for non-admin: only show leads assigned to or created by user
       const rawLeads = leadsRes?.data || [];
-      const filteredLeads = (!isAdmin && userId)
+      const userFilteredLeads = (!isAdmin && userId)
         ? rawLeads.filter((l: any) => {
             const assigned = l.assignedTo ? Number(l.assignedTo) : null;
             const created = l.createdBy ? Number(l.createdBy) : null;
             return assigned === userId || created === userId;
           })
         : rawLeads;
+
+      // Deduplicate leads by leadID
+      const seenLeadIds = new Set();
+      const filteredLeads = userFilteredLeads.filter((l: any) => {
+        const id = l.leadID ?? l.id;
+        if (!id || seenLeadIds.has(id)) return false;
+        seenLeadIds.add(id);
+        return true;
+      });
       setRecentLeads(filteredLeads);
 
       // Backend sales follow-ups only (100% dynamic from API & filtered by user)
@@ -161,18 +273,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    loadDashboardActions();
+  }, [loadData, loadDashboardActions]);
 
   // Reload when returning to dashboard screen
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [loadData])
+      loadDashboardActions();
+    }, [loadData, loadDashboardActions])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData();
+    await Promise.all([loadData(), loadDashboardActions()]);
     setRefreshing(false);
   };
 
@@ -283,56 +397,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
           </View>
         ) : (
           <>
-            {/* Activities Module Quick Actions - strictly permission-wise */}
-            {canAccessActivities && (
+            {/* Dynamic Activities Module Quick Actions - 100% strictly permission-wise */}
+            {dynamicQuickActions.length > 0 && (
               <View style={styles.quickActionsContainer}>
-                {canAccessMyTasks && (
+                {dynamicQuickActions.map((action) => (
                   <TouchableOpacity
+                    key={action.id}
                     style={styles.quickActionCard}
-                    onPress={() => navigation.navigate('MyTasks')}
+                    onPress={() => navigation.navigate(action.screen)}
+                    activeOpacity={0.7}
                   >
-                    <View style={[styles.quickActionIcon, { backgroundColor: 'rgba(100, 86, 149, 0.12)' }]}>
-                      <Ionicons name="checkbox-outline" size={20} color="#645695" />
+                    <View style={[styles.quickActionIcon, { backgroundColor: action.bgColor }]}>
+                      <Ionicons name={action.icon} size={20} color={action.iconColor} />
                     </View>
-                    <Text style={styles.quickActionLabel}>My Task</Text>
+                    <Text style={styles.quickActionLabel}>{action.label}</Text>
                   </TouchableOpacity>
-                )}
-
-                {canAccessNotes && (
-                  <TouchableOpacity
-                    style={styles.quickActionCard}
-                    onPress={() => navigation.navigate('Notes')}
-                  >
-                    <View style={[styles.quickActionIcon, { backgroundColor: '#fef3c7' }]}>
-                      <Ionicons name="document-text-outline" size={20} color="#d97706" />
-                    </View>
-                    <Text style={styles.quickActionLabel}>Notes</Text>
-                  </TouchableOpacity>
-                )}
-
-                {canAccessCRMInbox && (
-                  <TouchableOpacity
-                    style={styles.quickActionCard}
-                    onPress={() => navigation.navigate('InternalChat')}
-                  >
-                    <View style={[styles.quickActionIcon, { backgroundColor: '#dcfce7' }]}>
-                      <Ionicons name="chatbubbles-outline" size={20} color="#16a34a" />
-                    </View>
-                    <Text style={styles.quickActionLabel}>CRM Inbox</Text>
-                  </TouchableOpacity>
-                )}
-
-                {canAccessReminders && (
-                  <TouchableOpacity
-                    style={styles.quickActionCard}
-                    onPress={() => navigation.navigate('Reminder')}
-                  >
-                    <View style={[styles.quickActionIcon, { backgroundColor: '#ede9fe' }]}>
-                      <Ionicons name="alarm-outline" size={20} color="#7c3aed" />
-                    </View>
-                    <Text style={styles.quickActionLabel}>Reminder</Text>
-                  </TouchableOpacity>
-                )}
+                ))}
               </View>
             )}
 
@@ -406,7 +486,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
                   subtitle="Pending calls today"
                   onPress={() => navigation.navigate('SalesFollowUp')}
                 />
-                {canAccessMyTasks && (
+                {dynamicQuickActions.some((a) => a.id === 'mytask') && (
                   <StatCard
                     title="Tasks Pending"
                     value={String(salesMetrics?.pendingTasks ?? 0)}
@@ -490,12 +570,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
 
               {followUpsDueToday.length > 0 ? (
                 <>
-                  {followUpsDueToday.slice(0, 5).map((item) => {
+                  {followUpsDueToday.slice(0, 5).map((item, idx) => {
                     const phone = item.phone || item.mobileNo;
                     const custName = item.customerName || item.leadName || 'Customer';
                     return (
                       <TouchableOpacity
-                        key={String(item.followUpID || item.leadID)}
+                        key={`fup-due-${item.followUpID || item.leadID || ''}-${idx}`}
                         style={styles.followUpCard}
                         activeOpacity={0.85}
                         onPress={() => navigation.navigate('SalesFollowUp')}
@@ -512,7 +592,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
                               </Text>
                             ) : null}
                             <Text style={styles.followUpPurpose} numberOfLines={1}>
-                              {item.callPurpose || 'Follow-up'} • {item.followUpTime || '10:00 AM'}
+                              {item.callPurpose || 'Follow-up'}{item.followUpTime ? ` • ${item.followUpTime}` : ''}
                             </Text>
                           </View>
                         </View>
@@ -575,9 +655,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
 
               {recentLeads.length > 0 ? (
                 <>
-                  {recentLeads.slice(0, 5).map((lead) => (
+                  {recentLeads.slice(0, 5).map((lead, idx) => (
                     <LeadCard
-                      key={lead.leadID}
+                      key={`recent-lead-${lead.leadID || ''}-${idx}`}
                       lead={lead}
                       onPress={() => navigation.navigate('LeadDetails', { leadId: lead.leadID })}
                       onEdit={() => navigation.navigate('AddLead', { editLead: lead })}
@@ -632,7 +712,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
                     const bal = item.outstandingBalance || item.promisedAmount || 0;
                     return (
                       <TouchableOpacity
-                        key={String(item.followUpID || idx)}
+                        key={`cr-fup-${item.followUpID || ''}-${idx}`}
                         style={styles.followUpCard}
                         activeOpacity={0.85}
                         onPress={() => navigation.navigate('CreditFollowUp')}
@@ -650,7 +730,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
                               </Text>
                             ) : null}
                             <Text style={[styles.followUpPurpose, { color: Colors.danger, fontWeight: '600' }]} numberOfLines={1}>
-                              Due: {formatFullCurrency(bal)} • {item.outcome || 'Pending Payment'}
+                              {bal > 0 ? `Due: ${formatFullCurrency(bal)}` : 'Recovery'}{item.outcome ? ` • ${item.outcome}` : ''}
                             </Text>
                           </View>
                         </View>
@@ -715,7 +795,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
                     const isHigh = (cust.overdueAmount && cust.overdueAmount > 0) || cust.riskRating === 'High';
                     return (
                       <TouchableOpacity
-                        key={String(cust.customerId || cust.creditProfileID || idx)}
+                        key={`cust-${cust.customerId || cust.creditProfileID || ''}-${idx}`}
                         style={styles.followUpCard}
                         activeOpacity={0.85}
                         onPress={() => navigation.navigate('CreditFollowUp')}
@@ -734,7 +814,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
                               Outstanding: {formatFullCurrency(cust.outstandingBalance || 0)}
                             </Text>
                             <Text style={[styles.followUpPurpose, { color: isHigh ? Colors.danger : Colors.slate500 }]} numberOfLines={1}>
-                              Overdue: {formatFullCurrency(cust.overdueAmount || 0)} • {cust.riskRating || 'Active'}
+                              Overdue: {formatFullCurrency(cust.overdueAmount || 0)}{cust.riskRating ? ` • ${cust.riskRating}` : ''}
                             </Text>
                           </View>
                         </View>

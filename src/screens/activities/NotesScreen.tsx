@@ -36,7 +36,10 @@ interface NotesScreenProps {
 
 export const NotesScreen: React.FC<NotesScreenProps> = ({ navigation, route }) => {
   const { user } = useAuth();
-  const { selectedCompanyId } = useCompany();
+  const { selectedCompanyId, isAllCompanies } = useCompany();
+  const userRole = (user?.role || '').toLowerCase();
+  const isAdmin = userRole.includes('admin') || userRole.includes('super');
+  const userId = Number(user?.id || user?.userID);
 
   // Screen View Mode: false = List View (shown first), true = Full-Screen Form (NO MODAL)
   const [showForm, setShowForm] = useState(
@@ -95,18 +98,38 @@ export const NotesScreen: React.FC<NotesScreenProps> = ({ navigation, route }) =
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Fetch Notes List from API
+  // Fetch Notes List (Filtered by Company and Role: Admin = All, User = CreatedBy)
   const fetchNotes = useCallback(
     async (isRefresh = false) => {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
 
       try {
+        const targetCompanyId = isAllCompanies ? 0 : Number(selectedCompanyId || 0);
         const res = await notesService.getNotes({
-          companyId: selectedCompanyId || undefined,
+          companyId: targetCompanyId > 0 ? targetCompanyId : undefined,
           search: search.trim() || undefined,
         });
-        setNotes(res || []);
+
+        let list = res || [];
+
+        // 1. Company filter
+        if (!isAllCompanies && targetCompanyId > 0) {
+          list = list.filter((n: any) => {
+            const compId = Number(n.companyID ?? n.companyId ?? 0);
+            return compId === 0 || compId === targetCompanyId;
+          });
+        }
+
+        // 2. Role filter: Admin = all access, User = createdBy wise
+        if (!isAdmin && userId) {
+          list = list.filter((n: any) => {
+            const creator = Number(n.createdBy || n.createdByUserID || n.createdById || n.userId || 0);
+            return creator === userId;
+          });
+        }
+
+        setNotes(list);
       } catch (e) {
         console.warn('Error fetching notes:', e);
       } finally {
@@ -114,7 +137,7 @@ export const NotesScreen: React.FC<NotesScreenProps> = ({ navigation, route }) =
         setRefreshing(false);
       }
     },
-    [selectedCompanyId, search]
+    [selectedCompanyId, isAllCompanies, search, isAdmin, userId]
   );
 
   useEffect(() => {
@@ -202,8 +225,9 @@ export const NotesScreen: React.FC<NotesScreenProps> = ({ navigation, route }) =
         priority: editingNote?.priority || 'Medium',
         specification: specification.trim() || '',
         companyID: selectedCompanyId || 1,
-        createdBy: Number(currentUserId),
-        updatedBy: Number(currentUserId),
+        createdBy: Number(userId || currentUserId),
+        createdByUserID: Number(userId || currentUserId),
+        updatedBy: Number(userId || currentUserId),
       };
 
       if (isEditing && editingNote) {

@@ -98,62 +98,94 @@ export interface ContactPaginatedResponse {
 // ============================================================
 
 const normalizeContact = (c: any): Contact => {
-  const contactName = c.contactName || c.fullName || c.contactPerson || c.leadName || '';
-  const fullName = c.fullName || c.contactName || c.contactPerson || c.leadName || '';
-  const contactNumber = c.contactNumber || c.mobileNo || c.phone || '';
-  const mobileNo = c.mobileNo || c.contactNumber || c.phone || '';
-  const position = c.position || c.designation || '';
-  const designation = c.designation || c.position || '';
-  const address = c.address || c.addressLine1 || c.streetName || '';
-  const streetName = c.streetName || c.addressLine1 || c.address || '';
-  const aadharNo = c.aadharNo || c.adharNo || '';
-  const adharNo = c.adharNo || c.aadharNo || '';
-  const companyName = c.companyName || c.establishmentName || '';
-  const leadName = c.leadName || fullName || '';
-  const status =
-    c.status === true ||
-    c.status === 1 ||
-    String(c.status).toLowerCase() === 'active' ||
-    String(c.status).toLowerCase() === 'true'
-      ? 'active'
-      : String(c.status).toLowerCase() === 'inactive'
+  // SQL/API response मधील PascalCase आणि camelCase दोन्ही support
+  const get = (...keys: string[]) => {
+    for (const key of keys) {
+      if (c?.[key] !== undefined && c?.[key] !== null) {
+        return c[key];
+      }
+    }
+    return '';
+  };
+
+  const contactID = Number(
+    get('contactID', 'ContactID', 'id', 'Id', 'establishmentID', 'EstablishmentID')
+  ) || 0;
+
+  const fullName = get(
+    'fullName', 'FullName', 'contactName', 'ContactName',
+    'contactPerson', 'ContactPerson', 'leadName', 'LeadName'
+  );
+
+  const contactNumber = get(
+    'contactNumber', 'ContactNumber', 'mobileNo', 'MobileNo', 'phone', 'Phone'
+  );
+
+  const position = get('position', 'Position', 'designation', 'Designation');
+  const streetName = get(
+    'streetName', 'StreetName', 'addressLine1', 'AddressLine1', 'address', 'Address'
+  );
+
+  const aadharNo = get('aadharNo', 'AadharNo', 'adharNo', 'AdharNo');
+
+  const rawStatus = get('status', 'Status');
+  const status = (
+    rawStatus === true ||
+    rawStatus === 1 ||
+    String(rawStatus).toLowerCase() === 'active' ||
+    String(rawStatus).toLowerCase() === 'true'
+  )
+    ? 'active'
+    : String(rawStatus).toLowerCase() === 'inactive' ||
+      rawStatus === false ||
+      rawStatus === 0
       ? 'inactive'
-      : c.status || 'active';
+      : 'active';
 
   return {
     ...c,
-    contactID: Number(c.contactID || c.id || c.establishmentID || 0),
-    leadID: Number(c.leadID || c.leadId || 0),
-    companyID: c.companyID || c.companyId,
-    leadName,
-    companyName,
+    contactID,
+    id: contactID,
+    leadID: Number(get('leadID', 'LeadID', 'leadId', 'LeadId')) || 0,
+    leadId: Number(get('leadID', 'LeadID', 'leadId', 'LeadId')) || 0,
+    leadName: get('leadName', 'LeadName'),
+    companyID: Number(get('companyID', 'CompanyID', 'companyId', 'CompanyId')) || 0,
+    companyName: get('companyName', 'CompanyName', 'establishmentName', 'EstablishmentName'),
+
     fullName,
-    contactName,
+    contactName: fullName,
     contactPerson: fullName,
+
     contactNumber,
-    mobileNo,
+    mobileNo: contactNumber,
     phone: contactNumber,
+
+    email: get('email', 'Email'),
     position,
-    designation,
-    address,
+    designation: position,
+
     streetName,
     addressLine1: streetName,
-    city: c.city || '',
-    state: c.state || '',
-    pincode: c.pincode || c.postalCode || '',
-    postalCode: c.postalCode || c.pincode || '',
-    gstNo: c.gstNo || '',
-    panNo: c.panNo || '',
-    cinNo: c.cinNo || '',
+    address: streetName,
+    city: get('city', 'City'),
+    state: get('state', 'State'),
+    pincode: String(get('pincode', 'Pincode', 'postalCode', 'PostalCode')),
+
+    gstNo: get('gstNo', 'GSTNo'),
+    panNo: get('panNo', 'PANNo'),
+    cinNo: get('cinNo', 'CINNo'),
     aadharNo,
-    adharNo,
+    adharNo: aadharNo,
+
     status,
-    followUpDate: c.followUpDate || '',
-    followUpTime: c.followUpTime || '',
-    combinedFollowUpDateTime: c.combinedFollowUpDateTime || '',
+    isDefault:
+      get('isDefault', 'IsDefault', 'isPrimary', 'IsPrimary') === true ||
+      get('isDefault', 'IsDefault', 'isPrimary', 'IsPrimary') === 1,
+
+    followUpDate: get('followUpDate', 'FollowUpDate'),
+    followUpTime: get('followUpTime', 'FollowUpTime'),
   };
 };
-
 export const contactService = {
 
   // ==========================================================
@@ -297,39 +329,45 @@ export const contactService = {
   // GET CONTACT BY ID
   // ==========================================================
 
-  getContactById: async (
-    contactID: number
-  ): Promise<Contact | null> => {
+   getContactById: async (
+  contactID: number
+): Promise<Contact | null> => {
+  try {
+    const response = await apiClient.get(`/Contact/${contactID}`);
 
-    try {
+    console.log(
+      'GET CONTACT BY ID RAW RESPONSE:',
+      JSON.stringify(response.data, null, 2)
+    );
 
-      const response =
-        await apiClient.get(
-          `/Contact/${contactID}`
-        );
+    const raw = response.data;
 
-      return response.data ? normalizeContact(response.data) : null;
+    // Extract actual contact object from API response
+    const contactData =
+      raw?.data?.data ??
+      raw?.data ??
+      raw?.result ??
+      raw;
 
-    } catch (err: any) {
-
-      console.error(
-        'Error fetching contact by id:',
-        err?.message
-      );
-
-      console.error(
-        'Status:',
-        err?.response?.status
-      );
-
-      console.error(
-        'Data:',
-        err?.response?.data
-      );
-
-      throw err;
+    if (!contactData || typeof contactData !== 'object') {
+      console.warn('Contact details not found in API response');
+      return null;
     }
-  },
+
+    console.log(
+      'GET CONTACT BY ID ACTUAL DATA:',
+      JSON.stringify(contactData, null, 2)
+    );
+
+    return normalizeContact(contactData);
+
+  } catch (err: any) {
+    console.error('Error fetching contact by id:', err?.message);
+    console.error('Status:', err?.response?.status);
+    console.error('Data:', err?.response?.data);
+    throw err;
+  }
+},
 
   // ==========================================================
   // GET CONTACTS BY LEAD
@@ -542,5 +580,23 @@ export const contactService = {
       throw err;
     }
   },
+  getChildContacts: async (contactID: number): Promise<Contact[]> => {
+  try {
+    const response = await apiClient.get(
+      `/Contact/${contactID}/contacts`
+    );
+
+    const raw = response.data;
+    const records = raw?.data ?? raw?.result ?? raw;
+
+    return Array.isArray(records)
+      ? records.map(normalizeContact)
+      : [];
+  } catch (err: any) {
+    console.error('Error fetching child contacts:', err?.message);
+    console.error('Data:', err?.response?.data);
+    throw err;
+  }
+},
 
 };

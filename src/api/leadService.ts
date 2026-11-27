@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { SafeStorage } from '../utils/storage';
 
 export interface Lead {
   leadID: number;
@@ -120,13 +121,29 @@ async getLeads(
 
 
   // GET LEAD BY ID (matches Desktop LeadService.getLeadById)
-  getLeadById: async (leadId: number): Promise<Lead | null> => {
+  getLeadById: async (leadId: number | string, companyId?: number | null): Promise<Lead | null> => {
     try {
-      const response = await apiClient.get(`/Lead/${leadId}`);
+      const numId = Number(leadId);
+      if (!leadId || isNaN(numId) || numId <= 0) {
+        console.warn('getLeadById called with invalid leadId:', leadId);
+        return null;
+      }
+      const params: any = {};
+      let comp = companyId ? Number(companyId) : 0;
+      if (!comp || comp <= 0) {
+        const storedComp = await SafeStorage.getItem('crm_selected_company_id');
+        if (storedComp && Number(storedComp) > 0) {
+          comp = Number(storedComp);
+        }
+      }
+      if (comp > 0) {
+        params.companyId = comp;
+      }
+      const response = await apiClient.get(`/Lead/${numId}`, { params });
       return response.data;
-    } catch (err) {
-      console.error('Error fetching lead by id:', err);
-      throw err;
+    } catch (err: any) {
+      console.warn('Error fetching lead by id:', err?.response?.data || err?.message || err);
+      return null;
     }
   },
 
@@ -153,9 +170,21 @@ async getLeads(
   },
 
   // DELETE LEAD (matches Desktop LeadService.deleteLead)
-  deleteLead: async (leadId: number): Promise<any> => {
+  deleteLead: async (leadId: number | string, companyId?: number | null): Promise<any> => {
     try {
-      const response = await apiClient.delete(`/Lead/${leadId}`);
+      const numId = Number(leadId);
+      const params: any = {};
+      let comp = companyId ? Number(companyId) : 0;
+      if (!comp || comp <= 0) {
+        const storedComp = await SafeStorage.getItem('crm_selected_company_id');
+        if (storedComp && Number(storedComp) > 0) {
+          comp = Number(storedComp);
+        }
+      }
+      if (comp > 0) {
+        params.companyId = comp;
+      }
+      const response = await apiClient.delete(`/Lead/${numId}`, { params });
       return response.data;
     } catch (err) {
       console.error('Error deleting lead:', err);

@@ -52,17 +52,27 @@ export const LeadSelectorModal: React.FC<LeadSelectorModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredLeads = useMemo(() => {
-    if (!searchQuery.trim()) return leads;
-    const q = searchQuery.toLowerCase().trim();
-    return leads.filter((l) => {
-      const name = (l.name || l.leadName || l.customerName || '').toLowerCase();
-      if (hideCompanyPhone) {
-        return name.includes(q);
-      }
-      const comp = (l.companyName || '').toLowerCase();
-      const phone = (l.phone || l.mobileNo || '').toLowerCase();
-      const city = (l.city || '').toLowerCase();
-      return name.includes(q) || comp.includes(q) || phone.includes(q) || city.includes(q);
+    const list = searchQuery.trim()
+      ? leads.filter((l) => {
+          const q = searchQuery.toLowerCase().trim();
+          const name = (l.name || l.leadName || l.customerName || '').toLowerCase();
+          if (hideCompanyPhone) {
+            return name.includes(q);
+          }
+          const comp = (l.companyName || '').toLowerCase();
+          const phone = (l.phone || l.mobileNo || '').toLowerCase();
+          const city = (l.city || '').toLowerCase();
+          return name.includes(q) || comp.includes(q) || phone.includes(q) || city.includes(q);
+        })
+      : leads;
+
+    const seen = new Set();
+    return list.filter((item) => {
+      const id = item.id || item.leadID;
+      if (!id) return true;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
     });
   }, [leads, searchQuery, hideCompanyPhone]);
 
@@ -123,7 +133,7 @@ export const LeadSelectorModal: React.FC<LeadSelectorModalProps> = ({
           ) : (
             <FlatList
               data={filteredLeads}
-              keyExtractor={(item) => String(item.id || item.leadID || Math.random())}
+              keyExtractor={(item, index) => `${item.id || item.leadID || 'lead'}-${index}`}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
               renderItem={({ item }) => {

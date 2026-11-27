@@ -319,9 +319,11 @@ export const userService = {
     if (payload.role !== undefined) apiData.role = payload.role;
 
     if (payload.isActive !== undefined) {
-      apiData.isActive =
-        payload.isActive === false || String(payload.isActive).toLowerCase() === 'false' ? 'false' : 'true';
-    }
+  apiData.isActive =
+    payload.isActive === false || String(payload.isActive).toLowerCase() === 'false'
+      ? false
+      : true;
+}
 
     if (payload.companyIds && Array.isArray(payload.companyIds)) {
       apiData.companyIds = payload.companyIds;

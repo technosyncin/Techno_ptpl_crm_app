@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
   ActivityIndicator,
-  LayoutAnimation,
   Platform,
   UIManager,
 } from 'react-native';
@@ -17,7 +15,6 @@ import { Header } from '../../components/common/Header';
 import { useAuth } from '../../context/AuthContext';
 import { useCompany } from '../../context/CompanyContext';
 import { useMenu } from '../../context/MenuContext';
-import { apiClient } from '../../api/client';
 import { userPermissionService, UserPermissionItem } from '../../api/userPermissionService';
 import { Colors } from '../../theme/colors';
 
@@ -33,17 +30,7 @@ interface MoreScreenProps {
   navigation: any;
 }
 
-export interface MenuItemData {
-  menuID: number;
-  menuOrderID?: number;
-  menuName: string;
-  parentID?: number | null;
-  action?: string;
-  icon?: string;
-  isActive?: boolean;
-}
-
-// Exact 1:1 Mapping of Web CRM Bootstrap Icon class (bi bi-*) to Ionicons glyph name
+// Maps Web CRM Bootstrap Icon class (bi bi-*) to Ionicons glyph name
 export const mapBootstrapIconToIonic = (
   iconClass?: string,
   menuName?: string
@@ -51,71 +38,26 @@ export const mapBootstrapIconToIonic = (
   const ic = (iconClass || '').toLowerCase().trim();
   const name = (menuName || '').toLowerCase().trim();
 
-  // Dashboard & Speedometers
-  if (ic.includes('speedometer') || name.includes('admin dashbord') || name.includes('admin dashboard')) return 'speedometer';
-  if (ic.includes('bar-chart') || name.includes('dashboard') || name.includes('dashbord')) return 'bar-chart';
-
-  // Company & User / Administration
+  if (ic.includes('speedometer') || name.includes('dashbord') || name.includes('dashboard')) return 'bar-chart';
   if (ic.includes('buildings') || name.includes('company')) return 'business';
-  if (
-    ic.includes('shield-lock') ||
-    ic.includes('shield') ||
-    name.includes('user master') ||
-    name.includes('role') ||
-    name.includes('user')
-  )
-    return 'shield-checkmark';
-
-  // Sales & Leads
+  if (ic.includes('shield') || name.includes('user master') || name.includes('user') || name.includes('role')) return 'shield-checkmark';
   if (ic.includes('person-plus') || name.includes('add lead')) return 'person-add';
   if (ic.includes('funnel') || name === 'sales') return 'funnel';
-  if (ic.includes('card-checklist') || ic.includes('checklist') || name.includes('quotation') || name.includes('quatation'))
-    return 'document-text';
-  if (ic.includes('people') || name.includes('update contact') || name.includes('contact')) return 'people';
-  if (
-    ic.includes('telephone-outbound') ||
-    ic.includes('telephone-inbound') ||
-    ic.includes('telephone') ||
-    name.includes('follow-up') ||
-    name.includes('followup') ||
-    name.includes('call')
-  )
-    return 'call';
-
-  // Credit & Finance
-  if (ic.includes('credit-card') || name.includes('credit master') || name === 'credit' || name.includes('recovery'))
-    return 'card';
+  if (ic.includes('card-checklist') || ic.includes('checklist') || name.includes('quotation')) return 'document-text';
+  if (ic.includes('people') || name.includes('contact')) return 'people';
+  if (ic.includes('alarm') || name.includes('reminder')) return 'alarm';
+  if (ic.includes('credit-card') || name.includes('credit master') || name === 'credit') return 'card';
   if (ic.includes('plus-square') || name.includes('new transaction')) return 'add-circle';
-  if (ic.includes('box-arrow-in-down') || name.includes('payment collection')) return 'arrow-down-circle';
-  if (ic.includes('receipt') || name.includes('receipt')) return 'receipt';
-  if (ic.includes('cash') || name.includes('payment')) return 'cash';
-  if (ic.includes('clock-history') || name.includes('outstanding')) return 'time';
-  if (ic.includes('file-earmark-text') || ic.includes('invoice')) return 'document';
-  if (ic.includes('arrow-counterclockwise') || name.includes('return')) return 'refresh';
-  if (ic.includes('journal') || name.includes('journal entry')) return 'journal';
-
-  // Activities & Tasks
-  if (ic.includes('check2-square') || ic.includes('flag') || name.includes('my task') || name.includes('task'))
-    return 'checkbox';
-  if (ic.includes('alarm') || name.includes('reminder') || name.includes('remainder')) return 'alarm';
-  if (ic.includes('book') || name.includes('notes') || name.includes('note')) return 'book';
-  if (ic.includes('chat-dots') || name.includes('crm inbox') || name.includes('inbox') || name.includes('rcs'))
-    return 'chatbubbles';
-  if (ic.includes('person-video') || name.includes('meeting')) return 'videocam';
-  if (ic.includes('activity')) return 'pulse';
-
-  // Messaging & Templates
-  if (ic.includes('whatsapp') || name.includes('whatapp') || name.includes('whatsapp')) return 'logo-whatsapp';
-  if (ic.includes('chat-text') || name.includes('sms') || name.includes('text msg')) return 'chatbox-ellipses';
-  if (ic.includes('envelope') || name.includes('email') || name.includes('mail')) return 'mail';
-  if (ic.includes('arrow-repeat') || name.includes('bulk messaging')) return 'repeat';
+  if (ic.includes('arrow') || name.includes('payment collection') || name.includes('receipt')) return 'arrow-down-circle';
+  if (ic.includes('whatsapp')) return 'logo-whatsapp';
+  if (ic.includes('chat') || name.includes('sms')) return 'chatbox-ellipses';
+  if (ic.includes('envelope') || name.includes('email')) return 'mail';
+  if (ic.includes('call') || name.includes('voice')) return 'call';
+  if (ic.includes('dots') || name.includes('rcs')) return 'chatbubbles';
+  if (ic.includes('repeat') || name.includes('bulk')) return 'repeat';
   if (ic.includes('list') || name.includes('template')) return 'list';
-
-  // Reports & Utility
-  if (ic.includes('geo-alt') || name.includes('visit')) return 'location';
-  if (ic.includes('collection') || name.includes('reports') || name.includes('report')) return 'layers';
-  if (ic.includes('code-slash') || name.includes('dev utility') || name.includes('menu')) return 'code-slash';
-  if (ic.includes('sliders')) return 'options';
+  if (ic.includes('box') || name.includes('inventory') || name.includes('stock')) return 'cube-outline';
+  if (ic.includes('cart') || name.includes('order') || name.includes('purchase')) return 'cart-outline';
 
   return 'apps';
 };
@@ -125,7 +67,7 @@ export const getNavigationTarget = (action?: string, menuName?: string) => {
   const act = (action || '').toLowerCase().trim();
   const name = (menuName || '').toLowerCase().trim();
 
-  // Dashboards (fallback if any)
+  // Dashboards
   if (act.includes('dashboard') || name.includes('dashboard') || name.includes('dashbord')) {
     return { screen: 'Main', params: { screen: 'DashboardTab' } };
   }
@@ -133,796 +75,671 @@ export const getNavigationTarget = (action?: string, menuName?: string) => {
   if (act.includes('company') || name.includes('company')) {
     return { screen: 'CompaniesList' };
   }
-  // User Permission -> UserPermission
-  if (
-    act.includes('user-permission') ||
-    act.includes('userpermission') ||
-    name.includes('user permission') ||
-    name.includes('user permision') ||
-    name.includes('permission')
-  ) {
-    return { screen: 'UserPermission' };
-  }
-  // Users / Roles / Departments / User Master -> UsersList
+  // Users / Roles / User Master -> UsersList
   if (
     act.includes('users') ||
     act.includes('role') ||
-    act.includes('department') ||
+    act.includes('permission') ||
     name.includes('user master') ||
-    name.includes('user')
+    name.includes('user') ||
+    name.includes('role')
   ) {
     return { screen: 'UsersList' };
   }
   // Leads & Add Lead
-  if (name === 'add lead' || act.includes('sales/leads') || act.includes('add-lead')) {
+  if (name === 'add lead' || act.includes('add-lead')) {
     return { screen: 'LeadsList' };
   }
   if (act.includes('leads') || name.includes('lead')) {
     return { screen: 'Main', params: { screen: 'LeadsTab' } };
   }
   // Quotations
-  if (act.includes('quatation') || act.includes('quotation') || name.includes('quotation') || name.includes('quatation')) {
+  if (act.includes('quotation') || act.includes('quatation') || name.includes('quotation') || name.includes('quatation')) {
     return { screen: 'Quotations' };
   }
-  // Sales Follow-Up / Both Follow-Up
-  if (
-    act.includes('salesfollowup') ||
-    act.includes('bothfollowup') ||
-    act.includes('follow-up') ||
-    act.includes('followup') ||
-    name.includes('follow-up') ||
-    name.includes('followup')
-  ) {
+  // Follow-Up
+  if (act.includes('follow') || name.includes('follow')) {
     return { screen: 'SalesFollowUp' };
   }
-  // Contacts List
-  if (
-    (name.includes('contact') && (name.includes('list') || act.includes('list'))) ||
-    name === 'contacts list' ||
-    name === 'contact list' ||
-    name === 'contacts'
-  ) {
+  // Contacts
+  if (act.includes('contact') || name.includes('contact')) {
     return { screen: 'Contacts' };
   }
-  // Contacts (Open Update Contact Form directly like Lead)
-  if (name === 'update contact' || name === 'add contact' || name.includes('contact') || act.includes('contacts')) {
-    return { screen: 'Contacts' };
-  }
-  // Sales Reminder (Automated Lead Cadence)
-  if (
-    name.includes('sales reminder') ||
-    act.includes('salesreminder') ||
-    act.includes('sales/salesreminder')
-  ) {
+  // Sales Reminder
+  if (act.includes('salesreminder') || name.includes('sales reminder')) {
     return { screen: 'SalesReminder' };
-  }
-  // Credit Reminder (Automated Payment Cadence)
-  if (
-    name.includes('credit reminder') ||
-    act.includes('credit-mgm/reminder-setting') ||
-    act.includes('reminder-setting')
-  ) {
-    return { screen: 'CreditReminder' };
-  }
-  // Reminders
-  if (act.includes('reminder') || act.includes('remainder') || name.includes('reminder') || name.includes('remainder')) {
-    return { screen: 'Reminder' };
   }
   // Credit Master
   if (act.includes('credit-master') || name.includes('credit master')) {
     return { screen: 'CreditMaster' };
   }
-  // New Transaction (Directly opens Doc Type selection & transaction creation like Web)
-  if (
-    name.includes('new transaction') ||
-    act.includes('new-transaction') ||
-    act.includes('newtransaction')
-  ) {
+  // New Transaction
+  if (act.includes('new-transaction') || name.includes('new transaction') || name.includes('transaction')) {
     return { screen: 'NewTransaction' };
   }
-  // Payment Collection / Receipts / Transactions
+  // Payment Collection / Receipts
   if (
-    act.includes('payment-collection') ||
     act.includes('receipt') ||
     act.includes('payment') ||
     name.includes('payment collection') ||
-    name.includes('receipt') ||
-    name.includes('invoice') ||
-    act.includes('invoice')
+    name.includes('payment') ||
+    name.includes('collection') ||
+    name.includes('receipt')
   ) {
     return { screen: 'Receipts' };
   }
-  // Outstanding reports
-  if ((act.includes('reports') && act.includes('credit')) || name.includes('outstanding')) {
-    return { screen: 'OutstandingReports' };
+  // Credit Reminder
+  if (act.includes('reminder-setting') || name.includes('credit reminder')) {
+    return { screen: 'CreditReminder' };
+  }
+  // Reminders
+  if (act.includes('reminder') || name.includes('reminder')) {
+    return { screen: 'Reminder' };
   }
   // Tasks
-  if (act.includes('mytask') || name.includes('my task') || name.includes('task')) {
+  if (act.includes('task') || name.includes('task')) {
     return { screen: 'MyTasks' };
   }
   // Notes
-  if (act.includes('notes') || name.includes('note')) {
+  if (act.includes('note') || name.includes('note')) {
     return { screen: 'Notes' };
   }
-  // Internal Chat / Inbox
-  if (act.includes('chat') || name.includes('inbox') || name.includes('chat')) {
+  // Chat / Messages
+  if (
+    act.includes('chat') ||
+    act.includes('msg') ||
+    act.includes('sms') ||
+    act.includes('whatsapp') ||
+    name.includes('chat') ||
+    name.includes('sms') ||
+    name.includes('whatsapp')
+  ) {
     return { screen: 'InternalChat' };
   }
-  // Calls / Meetings
-  if (act.includes('calls') || act.includes('meetings') || name.includes('call') || name.includes('meeting')) {
-    return { screen: 'Activities', params: { initialTab: 'Calls' } };
-  }
-  // Reports / Visit
-  if (act.includes('visit') || act.includes('reports') || name.includes('report') || name.includes('visit')) {
-    return { screen: 'Main', params: { screen: 'ReportsTab' } };
-  }
-  // Dev Utility / Column Auth
-  if (act.includes('dev-utility') || act.includes('columnauth') || name.includes('dev utility')) {
-    return { screen: 'ServerConfig' };
-  }
 
-  // Fallback to Main tab
+  // Fallback to Main
   return { screen: 'Main' };
 };
 
-// Function to strictly exclude unwanted menus
-export const isExcludedMenu = (item: {
-  menuID?: number;
-  parentID?: number | null;
-  menuName?: string;
-  action?: string;
-}): boolean => {
-  const id = item.menuID;
-  const parentId = item.parentID;
-  const name = (item.menuName || '').toLowerCase().trim();
-  const act = (item.action || '').toLowerCase().trim();
+// Explicit string-based exclusion list for menus that should not be shown in More screen
+// (e.g. Dashboard is Tab 1, Reports are in Tab 4, Dev Utility, Activities, Follow-up)
+export const EXCLUDED_MENU_NAMES = [
+  'dashboard',
+  'dashbord',
+  'admin dashbord',
+  'admin dashboard',
+  'report',
+  'reports',
+  'visit report',
+  'outstanding report',
+  'dev utility',
+  'devutility',
+  'column auth',
+  'columnauth',
+  'server config',
+  'activities',
+  'activity',
+  'follow-up',
+  'followup',
+  'both follow-up',
+  'bothfollowup',
+];
 
-  // CRITICAL: NEVER exclude New Transaction or mandatory Credit/Sales/Admin tiles under any circumstances!
+export const isExcludedMenuString = (
+  menuName?: string,
+  action?: string,
+  parentName?: string
+): boolean => {
+  const name = (menuName || '').toLowerCase().trim();
+  const act = (action || '').toLowerCase().trim();
+  const parent = (parentName || '').toLowerCase().trim();
+
+  // Exclude entire modules that should not be on More screen:
+  // Activities, Reports (already on Report tab), Dashboard (Tab 1), Dev Utility
   if (
-    id === 60 ||
-    name.includes('new transaction') ||
-    name.includes('new-transaction') ||
-    act.includes('new-transaction') ||
-    act.includes('newtransaction')
+    parent.includes('activit') ||
+    parent.includes('report') ||
+    parent.includes('dashbord') ||
+    parent.includes('dashboard') ||
+    parent.includes('dev utility') ||
+    parent.includes('utility') ||
+    parent.includes('column auth') ||
+    name === 'activities' ||
+    name === 'activity' ||
+    name === 'crm inbox' ||
+    name === 'notes' ||
+    name === 'my task' ||
+    name === 'mytask' ||
+    name === 'reminder' ||
+    name === 'remainder'
   ) {
-    return false;
+    return true;
   }
+
+  // NEVER exclude any of the screenshot menus under any circumstances
   if (
-    id === 58 ||
-    id === 20 ||
-    id === 62 ||
-    id === 12 ||
-    id === 39 ||
-    id === 27 ||
-    id === 77 ||
-    id === 9 ||
-    id === 10 ||
-    id === 99
-  ) {
-    return false;
-  }
-  if (
+    name.includes('company') ||
     name.includes('user master') ||
-    name.includes('company master') ||
-    name === 'company' ||
-    name.includes('user permission') ||
-    name.includes('user permision') ||
-    act.includes('user-permission') ||
-    name.includes('credit master') ||
-    name.includes('payment collection') ||
-    name.includes('credit reminder') ||
-    name.includes('add lead') ||
+    name.includes('lead') ||
     name.includes('quotation') ||
     name.includes('quatation') ||
-    name.includes('update contact') ||
-    name.includes('sales reminder')
+    name.includes('contact') ||
+    name.includes('transaction') ||
+    name.includes('credit master') ||
+    name.includes('payment') ||
+    name.includes('collection') ||
+    name.includes('receipt') ||
+    name.includes('sales reminder') ||
+    name.includes('credit reminder') ||
+    name.includes('text sms') ||
+    name.includes('whatsapp') ||
+    name.includes('email') ||
+    name.includes('voice') ||
+    name.includes('rcs')
   ) {
     return false;
   }
 
-  // 1. Dashboards & Dev Utility completely removed
-  if (
-    id === 38 ||
-    id === 34 ||
-    id === 75 ||
-    id === 59 ||
-    id === 79 ||
-    id === 80 ||
-    name.includes('dashboard') ||
-    name.includes('dashbord') ||
-    name.includes('dev utility') ||
-    name.includes('utility') ||
-    act.includes('dashboard') ||
-    act.includes('dashbord') ||
-    act.includes('dev-utility') ||
-    act.includes('columnauth')
-  ) {
-    return true;
-  }
-
-  // 2. All Activities (Activities module and all its submenus: My Task, Notes, CRM Inbox, Reminder, Calls, Meeting)
-  if (
-    id === 48 ||
-    parentId === 48 ||
-    parentId === 13 ||
-    name === 'activities' ||
-    id === 51 || // My Task
-    id === 68 || // Notes
-    id === 78 || // CRM Inbox
-    id === 57 || // Reminder
-    id === 14 || // Calls
-    id === 25 || // Meeting
-    act.includes('activities/') ||
-    act === 'chat'
-  ) {
-    return true;
-  }
-
-  // 3. Sales Follow-Up, Credit Follow-Up, and general Follow-Up
-  if (
-    id === 74 ||
-    id === 61 ||
-    id === 76 ||
-    name.includes('sales follow-up') ||
-    name.includes('sales follow up') ||
-    name.includes('credit follow-up') ||
-    name.includes('credit follow up') ||
-    name === 'follow-up' ||
-    name === 'follow up' ||
-    act.includes('salesfollowup') ||
-    act.includes('bothfollowup') ||
-    act.includes('credit-mgm/follow-up')
-  ) {
-    return true;
-  }
-
-  // 4. Reports & Visit completely removed
-  if (
-    id === 63 ||
-    id === 53 ||
-    parentId === 63 ||
-    name.includes('report') ||
-    name.includes('visit') ||
-    act.includes('report') ||
-    act.includes('visit')
-  ) {
-    return true;
-  }
-
-  // 5. Under Sales (Parent: 11), ONLY allow: 1. Add Lead (12), 2. Quotation List (39), 3. Update Contact (27), 4. Sales Reminder (77)
-  if (parentId === 11) {
-    const isAllowedSales = id === 12 || id === 39 || id === 27 || id === 77;
-    if (!isAllowedSales) return true;
-  }
-
-  // 6. Under Credit (Parent: 19), ONLY allow: 1. Credit Master (58), 2. New Transaction (60), 3. Payment Collection (20), 4. Credit Reminder (62)
-  if (parentId === 19) {
-    const isAllowedCredit = id === 58 || id === 60 || id === 20 || id === 62;
-    if (!isAllowedCredit) return true;
-  }
-
-  // 7. Root module container menus (Admin Masters, Sales, Credit, Bulk Messaging, Templates) must never be tiles
-  if (
-    id === 11 ||
-    name === 'sales' ||
-    id === 19 ||
-    name === 'credit' ||
-    id === 64 ||
-    name === 'bulk messaging' ||
-    id === 65 ||
-    name === 'templates' ||
-    id === 63 ||
-    name === 'reports' ||
-    name === 'admin masters' ||
-    name === 'administration'
-  ) {
-    return true;
-  }
-
-  return false;
+  // String-based validation check
+  return EXCLUDED_MENU_NAMES.some((ex) => name === ex || name.includes(ex) || act.includes(ex));
 };
 
-// Web CRM Theme Badges - All unified to the elegant Sales module theme (#645695 / #ede9fe)
-const SALES_MODULE_THEME = { bg: '#ede9fe', color: '#645695', border: '#ddd6fe' };
+export interface LayoutTileConfig {
+  key: string;
+  defaultMenuID: number;
+  menuName: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  action: string;
+  screen: string;
+  params?: any;
+  matchPatterns: string[];
+}
 
-const CATEGORY_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-  'Admin Masters': SALES_MODULE_THEME,
-  Sales: SALES_MODULE_THEME,
-  Credit: SALES_MODULE_THEME,
-  'Bulk Messaging': SALES_MODULE_THEME,
-  Templates: SALES_MODULE_THEME,
-  Other: SALES_MODULE_THEME,
-};
-
-interface ModuleSection {
+export interface LayoutSectionConfig {
   id: string;
   moduleName: string;
   icon: keyof typeof Ionicons.glyphMap;
-  theme: { bg: string; color: string; border: string };
   isFiveTileRow?: boolean;
-  items: MenuItemData[];
+  tiles: LayoutTileConfig[];
 }
+
+// Blueprint matching user reference screenshot layout
+const SCREENSHOT_LAYOUT_BLUEPRINT: LayoutSectionConfig[] = [
+  {
+    id: 'Admin Masters',
+    moduleName: 'Admin Masters',
+    icon: 'shield-checkmark',
+    tiles: [
+      {
+        key: 'company-master',
+        defaultMenuID: 9,
+        menuName: 'Company Master',
+        icon: 'business',
+        action: '/company',
+        screen: 'CompaniesList',
+        matchPatterns: ['company', 'company master', '/company'],
+      },
+      {
+        key: 'user-master',
+        defaultMenuID: 10,
+        menuName: 'User Master',
+        icon: 'shield-checkmark',
+        action: '/users',
+        screen: 'UsersList',
+        matchPatterns: ['user master', 'users', 'user', 'role', '/users'],
+      },
+    ],
+  },
+  {
+    id: 'Sales',
+    moduleName: 'Sales',
+    icon: 'funnel',
+    tiles: [
+      {
+        key: 'add-lead',
+        defaultMenuID: 12,
+        menuName: 'Add Lead',
+        icon: 'person-add',
+        action: '/sales/leads',
+        screen: 'LeadsList',
+        matchPatterns: ['add lead', 'lead', '/sales/leads', 'sales/leads'],
+      },
+      {
+        key: 'quotation-list',
+        defaultMenuID: 39,
+        menuName: 'Quotation List',
+        icon: 'document-text',
+        action: 'sales/Quatation',
+        screen: 'Quotations',
+        matchPatterns: ['quotation', 'quatation', 'quotation list'],
+      },
+      {
+        key: 'update-contact',
+        defaultMenuID: 27,
+        menuName: 'Update Contact',
+        icon: 'people',
+        action: 'sales/contacts',
+        screen: 'Contacts',
+        matchPatterns: ['update contact', 'contact', 'contacts', 'contacts list'],
+      },
+      {
+        key: 'sales-reminder',
+        defaultMenuID: 77,
+        menuName: 'Sales Reminder',
+        icon: 'alarm',
+        action: 'sales/SalesReminder',
+        screen: 'SalesReminder',
+        matchPatterns: ['sales reminder', 'salesreminder', 'reminder'],
+      },
+    ],
+  },
+  {
+    id: 'Credit',
+    moduleName: 'Credit',
+    icon: 'card',
+    tiles: [
+      {
+        key: 'credit-master',
+        defaultMenuID: 58,
+        menuName: 'Credit Master',
+        icon: 'card',
+        action: 'credit-mgm/credit-master',
+        screen: 'CreditMaster',
+        matchPatterns: ['credit master', 'credit-master'],
+      },
+      {
+        key: 'new-transaction',
+        defaultMenuID: 60,
+        menuName: 'New Transaction',
+        icon: 'add-circle',
+        action: 'credit-mgm/new-transaction',
+        screen: 'NewTransaction',
+        matchPatterns: ['new transaction', 'new-transaction', 'transaction'],
+      },
+      {
+        key: 'payment-collection',
+        defaultMenuID: 20,
+        menuName: 'Payment Collection',
+        icon: 'arrow-down-circle',
+        action: 'credit-mgm/payment-collection',
+        screen: 'Receipts',
+        matchPatterns: ['payment collection', 'collection', 'payment', 'receipt'],
+      },
+      {
+        key: 'credit-reminder',
+        defaultMenuID: 62,
+        menuName: 'Credit Reminder',
+        icon: 'alarm',
+        action: '/credit-mgm/reminder-setting',
+        screen: 'CreditReminder',
+        matchPatterns: ['credit reminder', 'reminder-setting'],
+      },
+    ],
+  },
+  {
+    id: 'Bulk Messaging',
+    moduleName: 'Bulk Messaging',
+    icon: 'repeat',
+    isFiveTileRow: true,
+    tiles: [
+      {
+        key: 'bulk-sms',
+        defaultMenuID: 50,
+        menuName: 'Text SMS',
+        icon: 'chatbox-ellipses',
+        action: 'BulkMessaging/TextMsg',
+        screen: 'InternalChat',
+        matchPatterns: ['text msg', 'text sms', 'sms'],
+      },
+      {
+        key: 'bulk-whatsapp',
+        defaultMenuID: 55,
+        menuName: 'WhatsApp',
+        icon: 'logo-whatsapp',
+        action: 'BulkMessaging/Whatapp',
+        screen: 'InternalChat',
+        matchPatterns: ['whatsapp', 'whatapp'],
+      },
+      {
+        key: 'bulk-email',
+        defaultMenuID: 56,
+        menuName: 'Email',
+        icon: 'mail',
+        action: 'BulkMessaging/Email',
+        screen: 'InternalChat',
+        matchPatterns: ['email', 'mail'],
+      },
+      {
+        key: 'bulk-voice',
+        defaultMenuID: 66,
+        menuName: 'Voice Call',
+        icon: 'call',
+        action: 'BulkMessaging/VoiceCall',
+        screen: 'InternalChat',
+        matchPatterns: ['voice call', 'voice'],
+      },
+      {
+        key: 'bulk-rcs',
+        defaultMenuID: 67,
+        menuName: 'RCS',
+        icon: 'chatbubbles',
+        action: 'BulkMessaging/RCSMsg',
+        screen: 'InternalChat',
+        matchPatterns: ['rcs msg', 'rcs'],
+      },
+    ],
+  },
+  {
+    id: 'Templates',
+    moduleName: 'Templates',
+    icon: 'list',
+    isFiveTileRow: true,
+    tiles: [
+      {
+        key: 'tmpl-sms',
+        defaultMenuID: 70,
+        menuName: 'Text SMS',
+        icon: 'chatbox-ellipses',
+        action: 'Templates/TextMsgTemplates',
+        screen: 'InternalChat',
+        matchPatterns: ['text msg', 'text sms', 'sms'],
+      },
+      {
+        key: 'tmpl-whatsapp',
+        defaultMenuID: 72,
+        menuName: 'WhatsApp',
+        icon: 'logo-whatsapp',
+        action: 'Templates/WhatappTemplates',
+        screen: 'InternalChat',
+        matchPatterns: ['whatsapp', 'whatapp'],
+      },
+      {
+        key: 'tmpl-email',
+        defaultMenuID: 73,
+        menuName: 'Email',
+        icon: 'mail',
+        action: 'Templates/EmailTemplates',
+        screen: 'InternalChat',
+        matchPatterns: ['email', 'mail'],
+      },
+      {
+        key: 'tmpl-voice',
+        defaultMenuID: 69,
+        menuName: 'Voice Call',
+        icon: 'call',
+        action: 'Templates/VoiceCallTemplates',
+        screen: 'InternalChat',
+        matchPatterns: ['voice call', 'voice'],
+      },
+      {
+        key: 'tmpl-rcs',
+        defaultMenuID: 71,
+        menuName: 'RCS',
+        icon: 'chatbubbles',
+        action: 'Templates/RCSMsgTemplates',
+        screen: 'InternalChat',
+        matchPatterns: ['rcs msg', 'rcs'],
+      },
+    ],
+  },
+];
 
 export const MoreScreen: React.FC<MoreScreenProps> = ({ navigation }) => {
   const { user, logout } = useAuth();
-  const { selectedCompany, companies } = useCompany();
-  const { authorizedMenuIds: contextAuthorizedMenuIds } = useMenu();
+  const { companies } = useCompany();
+  const { refreshMenus } = useMenu();
 
   const userRole = (user?.role || '').toLowerCase();
   const isAdmin = userRole.includes('admin') || userRole.includes('super');
 
-  const [search, setSearch] = useState('');
-  const [menus, setMenus] = useState<MenuItemData[]>([]);
-  const [authorizedMenuIds, setAuthorizedMenuIds] = useState<Set<number>>(new Set());
+  const [authorizedSections, setAuthorizedSections] = useState<LayoutSectionConfig[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Exact menus from TSI_CRM database Menu table (with Admin Masters at top; Dashboards, Utility & Reports removed)
-  const defaultTsiCrmMenus: MenuItemData[] = useMemo(
-    () => [
-      // Top Admin Masters (ParentID: 0) - 1. Company Master, 2. User Master, 3. User Permission
-      { menuID: 9, menuOrderID: 1, menuName: 'Company Master', action: '/company', icon: 'bi bi-buildings', parentID: 0 },
-      { menuID: 10, menuOrderID: 2, menuName: 'User Master', action: '/users', icon: 'bi bi-people', parentID: 0 },
-      { menuID: 99, menuOrderID: 3, menuName: 'User Permission', action: '/user-permission', icon: 'bi bi-shield-lock', parentID: 0 },
-
-      // Submenus under Sales (Parent: 11) - Exactly 4 requested tiles
-      { menuID: 12, menuOrderID: 1, menuName: 'Add Lead', action: '/sales/leads', icon: 'bi-person-plus', parentID: 11 },
-      { menuID: 39, menuOrderID: 2, menuName: 'Quotation List', action: 'sales/Quatation', icon: 'bi bi-card-checklist', parentID: 11 },
-      { menuID: 27, menuOrderID: 3, menuName: 'Update Contact', action: 'sales/contacts', icon: 'bi bi-people', parentID: 11 },
-      { menuID: 77, menuOrderID: 4, menuName: 'Sales Reminder', action: 'sales/SalesReminder', icon: 'bi bi-sliders', parentID: 11 },
-
-      // Submenus under Credit (Parent: 19) - Exactly 4 requested tiles
-      { menuID: 58, menuOrderID: 1, menuName: 'Credit Master', action: 'credit-mgm/credit-master', icon: 'bi bi-credit-card', parentID: 19 },
-      { menuID: 60, menuOrderID: 2, menuName: 'New Transaction', action: 'credit-mgm/new-transaction', icon: 'bi-plus-square', parentID: 19 },
-      { menuID: 20, menuOrderID: 3, menuName: 'Payment Collection', action: 'credit-mgm/payment-collection', icon: 'bi bi-box-arrow-in-down', parentID: 19 },
-      { menuID: 62, menuOrderID: 4, menuName: 'Credit Reminder', action: '/credit-mgm/reminder-setting', icon: 'bi bi-sliders', parentID: 19 },
-
-      // Submenus under Bulk Messaging (Parent: 64) - Exactly 5 tiles
-      { menuID: 50, menuOrderID: 1, menuName: 'Text SMS', action: 'BulkMessaging/TextMsg', icon: 'bi bi-chat-text', parentID: 64 },
-      { menuID: 55, menuOrderID: 2, menuName: 'WhatsApp', action: 'BulkMessaging/Whatapp', icon: 'bi bi-whatsapp', parentID: 64 },
-      { menuID: 56, menuOrderID: 3, menuName: 'Email', action: 'BulkMessaging/Email', icon: 'bi bi-envelope-open', parentID: 64 },
-      { menuID: 66, menuOrderID: 4, menuName: 'Voice Call', action: 'BulkMessaging/VoiceCall', icon: 'bi bi-telephone', parentID: 64 },
-      { menuID: 67, menuOrderID: 5, menuName: 'RCS', action: 'BulkMessaging/RCSMsg', icon: 'bi bi-chat-dots', parentID: 64 },
-
-      // Submenus under Templates (Parent: 65) - Exactly 5 tiles
-      { menuID: 70, menuOrderID: 1, menuName: 'Text SMS', action: 'Templates/TextMsgTemplates', icon: 'bi bi-chat-text', parentID: 65 },
-      { menuID: 72, menuOrderID: 2, menuName: 'WhatsApp', action: 'Templates/WhatappTemplates', icon: 'bi bi-whatsapp', parentID: 65 },
-      { menuID: 73, menuOrderID: 3, menuName: 'Email', action: 'Templates/EmailTemplates', icon: 'bi bi-envelope-open', parentID: 65 },
-      { menuID: 69, menuOrderID: 4, menuName: 'Voice Call', action: 'Templates/VoiceCallTemplates', icon: 'bi bi-telephone', parentID: 65 },
-      { menuID: 71, menuOrderID: 5, menuName: 'RCS', action: 'Templates/RCSMsgTemplates', icon: 'bi bi-chat-dots', parentID: 65 },
-    ],
-    []
-  );
-
-  // Fetch menus dynamically and user permissions from DB
-  const loadMenusAndPermissions = React.useCallback(async () => {
+  // Dynamic Loader: Evaluates blueprint layout AND dynamically surfaces newly created Web CRM menus!
+  const loadDynamicMenus = useCallback(async () => {
     if (!isAdmin && companies.length === 0) {
-      setAuthorizedMenuIds(new Set());
-      setMenus([]);
+      setAuthorizedSections([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      const uId = Number(user?.id || user?.userID);
-      let allowed = new Set<number>();
+      const uId = Number(user?.id || (user as any)?.userID || 0);
+      const res = await userPermissionService.getUserPermissions(uId);
 
-      if (contextAuthorizedMenuIds && contextAuthorizedMenuIds.size > 0) {
-        contextAuthorizedMenuIds.forEach((id) => allowed.add(id));
+      interface FlatPermItem {
+        menuID: number;
+        menuName: string;
+        rawName: string;
+        action: string;
+        icon?: string;
+        auth: boolean;
+        parentID?: number | null;
+        parentName: string;
       }
 
-      // 1. Fetch authorized permissions for current logged in user from MenuAuth
-      if (uId && uId > 0) {
-        try {
-          const permRes = await userPermissionService.getUserPermissions(uId);
-          if (permRes && permRes.menus) {
-            const traverse = (items: UserPermissionItem[]) => {
-              items.forEach((item) => {
-                if (item.auth === true) {
-                  allowed.add(Number(item.menuID));
-                }
-                if (item.children && item.children.length > 0) {
-                  traverse(item.children);
-                }
+      const flatPerms: FlatPermItem[] = [];
+
+      if (res && res.menus) {
+        res.menus.forEach((parent) => {
+          flatPerms.push({
+            menuID: Number(parent.menuID),
+            menuName: (parent.menuName || '').toLowerCase().trim(),
+            rawName: parent.menuName || 'Menu',
+            action: (parent.action || '').toLowerCase().trim(),
+            icon: parent.icon,
+            auth: !!parent.auth,
+            parentID: 0,
+            parentName: '',
+          });
+
+          if (parent.children && parent.children.length > 0) {
+            parent.children.forEach((child) => {
+              flatPerms.push({
+                menuID: Number(child.menuID),
+                menuName: (child.menuName || '').toLowerCase().trim(),
+                rawName: child.menuName || 'Sub Menu',
+                action: (child.action || '').toLowerCase().trim(),
+                icon: child.icon,
+                auth: !!child.auth,
+                parentID: Number(parent.menuID),
+                parentName: (parent.menuName || '').toLowerCase().trim(),
               });
-            };
-            traverse(permRes.menus);
-
-            // Grant User Permission (99) if User Master (10) or Dev Utility (34) is authorized
-            if (allowed.has(10) || allowed.has(34)) {
-              allowed.add(99);
-            }
+            });
           }
-        } catch (permErr) {
-          console.warn('Error fetching user permissions in MoreScreen:', permErr);
-          // If system root admin, fallback to full admin set
-          if (isAdmin && (user?.username?.toLowerCase() === 'admin' || uId === 1031)) {
-            allowed = new Set<number>([9, 10, 99, 12, 39, 27, 77, 58, 60, 20, 62, 50, 55, 56, 66, 67, 70, 72, 73, 69, 71]);
-          }
-        }
+        });
       }
 
-      setAuthorizedMenuIds(allowed);
+      // Track which database items got matched by blueprint tiles
+      const matchedDbMenuIds = new Set<number>();
 
-      // 2. Fetch full menu list from backend
-      const res = await apiClient.get('/Menu');
-      if (res && res.data) {
-        const list = Array.isArray(res.data) ? res.data : (res.data.data || []);
-        if (list.length > 0) {
-          const mapped = list
-            .map((m: any) => ({
-              menuID: m.MenuID || m.menuID,
-              menuOrderID: m.MenuOrderID || m.menuOrderID,
-              menuName: m.MenuName || m.menuName,
-              parentID: m.ParentID !== undefined ? m.ParentID : m.parentID,
-              action: m.Action || m.action,
-              icon: m.Icon || m.icon,
-              isActive: m.IsActive !== undefined ? m.IsActive : m.isActive,
-            }))
-            .filter((m: MenuItemData) => !isExcludedMenu(m));
+      // 1. First Pass: Evaluate Blueprint layout sections and tiles
+      const evaluatedSections: LayoutSectionConfig[] = SCREENSHOT_LAYOUT_BLUEPRINT.map((section) => {
+        const secLower = section.id.toLowerCase();
 
-          setMenus(mapped);
+        // If the parent module in DB is explicitly revoked (auth === false), hide the whole section
+        const parentModuleInDb = flatPerms.find((p) => {
+          if (p.parentID !== 0) return false;
+          if (secLower.includes('sales') && p.menuName.includes('sales')) return true;
+          if (secLower.includes('credit') && p.menuName.includes('credit')) return true;
+          if (secLower.includes('bulk') && p.menuName.includes('bulk')) return true;
+          if (secLower.includes('template') && (p.menuName.includes('template') || p.menuName.includes('templte'))) return true;
+          return false;
+        });
+        if (parentModuleInDb && parentModuleInDb.auth === false) {
+          return {
+            ...section,
+            tiles: [],
+          };
+        }
+
+        const allowedTiles = section.tiles.filter((tile) => {
+          // Find matching database item with parent-module awareness
+          const dbMatch = flatPerms.find((p) => {
+            if (p.menuID === tile.defaultMenuID) return true;
+            if (p.parentName) {
+              if (secLower.includes('sales') && !p.parentName.includes('sales')) return false;
+              if (secLower.includes('credit') && !p.parentName.includes('credit')) return false;
+              if (secLower.includes('bulk') && !p.parentName.includes('bulk')) return false;
+              if (secLower.includes('template') && !p.parentName.includes('template')) return false;
+              if (secLower.includes('admin') && p.parentID !== 0) return false;
+            }
+            return tile.matchPatterns.some((pattern) => {
+              const pat = pattern.toLowerCase();
+              return p.menuName.includes(pat) || (p.action && p.action.includes(pat));
+            });
+          });
+
+          if (dbMatch) {
+            matchedDbMenuIds.add(dbMatch.menuID);
+            // Strictly require auth === true from database (no admin bypass!)
+            // Matches Web CRM MainLayout.jsx: if permission is removed, hide immediately
+            return dbMatch.auth === true;
+          }
+
+          // If not in database permissions or no match, do not show
+          return false;
+        });
+
+        return {
+          ...section,
+          tiles: [...allowedTiles],
+        };
+      });
+
+      // 2. Second Pass: Dynamically discover ANY newly created menus from Web CRM!
+      // If a new menu was created in web and granted auth, append it to its module!
+      flatPerms.forEach((item) => {
+        // Strictly require auth === true from database (no admin bypass!)
+        if (!item.auth) return;
+        if (matchedDbMenuIds.has(item.menuID)) return; // Already matched in blueprint!
+
+        // String-based validation check to exclude menus that should not be shown in More
+        // (Dashboard is Tab 1, Reports are in Tab 4, Dev Utility, Activities, Follow-up)
+        if (isExcludedMenuString(item.menuName, item.action, item.parentName)) {
           return;
         }
-      }
+
+        // Exclude root module containers (like standalone "sales", "credit" with no children)
+        if (item.parentID === 0) {
+          const n = item.menuName;
+          if (n === 'sales' || n === 'credit' || n === 'bulk messaging' || n === 'templates') {
+            return;
+          }
+        }
+
+        const nav = getNavigationTarget(item.action, item.rawName);
+        const dynamicTile: LayoutTileConfig = {
+          key: `dynamic-${item.menuID}-${item.rawName}`,
+          defaultMenuID: item.menuID,
+          menuName: item.rawName,
+          icon: mapBootstrapIconToIonic(item.icon, item.rawName),
+          action: item.action,
+          screen: nav.screen,
+          params: nav.params,
+          matchPatterns: [item.menuName],
+        };
+
+        const pName = item.parentName || '';
+
+        // Safe helper to append tile only if not duplicate
+        const appendIfUnique = (targetSecId: string): boolean => {
+          const s = evaluatedSections.find((sec) => sec.id === targetSecId);
+          if (s) {
+            const alreadyExists = s.tiles.some(
+              (t) =>
+                t.defaultMenuID === item.menuID ||
+                t.menuName.toLowerCase().trim() === item.rawName.toLowerCase().trim() ||
+                (t.action && item.action && t.action.toLowerCase().trim() === item.action.toLowerCase().trim())
+            );
+            if (!alreadyExists) {
+              s.tiles.push(dynamicTile);
+            }
+            matchedDbMenuIds.add(item.menuID);
+            return true;
+          }
+          return false;
+        };
+
+        // Case A: Belongs to existing module (Sales, Credit, Bulk Messaging, Templates)
+        if (pName.includes('sales')) {
+          if (appendIfUnique('Sales')) return;
+        }
+        if (pName.includes('credit')) {
+          if (appendIfUnique('Credit')) return;
+        }
+        if (pName.includes('bulk')) {
+          if (appendIfUnique('Bulk Messaging')) return;
+        }
+        if (pName.includes('template')) {
+          if (appendIfUnique('Templates')) return;
+        }
+
+        // Case B: Standalone Root menu -> Append to Admin Masters
+        if (item.parentID === 0) {
+          if (appendIfUnique('Admin Masters')) return;
+        }
+
+        // Case C: Newly created custom Parent Module in Web (e.g. Inventory, HR, etc.)
+        if (item.parentName) {
+          const existingSec = evaluatedSections.find(
+            (sec) => sec.moduleName.toLowerCase() === item.parentName.toLowerCase()
+          );
+          if (existingSec) {
+            const alreadyExists = existingSec.tiles.some(
+              (t) =>
+                t.defaultMenuID === item.menuID ||
+                t.menuName.toLowerCase().trim() === item.rawName.toLowerCase().trim()
+            );
+            if (!alreadyExists) {
+              existingSec.tiles.push(dynamicTile);
+            }
+          } else {
+            // Create a new module section dynamically!
+            const parentRecord = flatPerms.find((p) => p.menuName === item.parentName);
+            evaluatedSections.push({
+              id: `custom-module-${item.parentID}`,
+              moduleName: parentRecord?.rawName || item.parentName.toUpperCase(),
+              icon: mapBootstrapIconToIonic(parentRecord?.icon, item.parentName),
+              isFiveTileRow: false,
+              tiles: [dynamicTile],
+            });
+          }
+          matchedDbMenuIds.add(item.menuID);
+        }
+      });
+
+      // Filter out sections that have 0 authorized tiles
+      const finalSections = evaluatedSections.filter((section) => section.tiles.length > 0);
+      setAuthorizedSections(finalSections);
     } catch (err) {
-      console.warn('Using default TSI_CRM database menu list:', err);
+      console.warn('Error dynamically evaluating MoreScreen menus:', err);
+      setAuthorizedSections([]);
     } finally {
       setLoading(false);
     }
-    setMenus(defaultTsiCrmMenus.filter((m) => !isExcludedMenu(m)));
-  }, [user, defaultTsiCrmMenus, isAdmin, companies.length, contextAuthorizedMenuIds]);
+  }, [user, isAdmin, companies.length]);
 
   useEffect(() => {
-    loadMenusAndPermissions();
-  }, [loadMenusAndPermissions]);
+    loadDynamicMenus();
+  }, [loadDynamicMenus]);
 
-  // Refresh permissions and menus whenever user navigates back to More tab
+  // Refresh dynamic permissions whenever user navigates back to More tab
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      loadMenusAndPermissions();
+      loadDynamicMenus();
+      refreshMenus().catch(() => {});
     });
     return unsubscribe;
-  }, [navigation, loadMenusAndPermissions]);
+  }, [navigation, loadDynamicMenus, refreshMenus]);
 
-  // Determine category badge for each menu item
-  const getCategoryForMenu = (item: MenuItemData): string => {
-    const parentId = item.parentID;
-    const name = (item.menuName || '').toLowerCase().trim();
-    const act = (item.action || '').toLowerCase().trim();
-
-    if (
-      item.menuID === 10 ||
-      item.menuID === 9 ||
-      item.menuID === 99 ||
-      name.includes('user master') ||
-      name.includes('company') ||
-      name.includes('user permission') ||
-      name.includes('permission') ||
-      name.includes('permision')
-    ) {
-      return 'Admin Masters';
+  const handleTilePress = (tile: LayoutTileConfig) => {
+    if (tile.params) {
+      navigation.navigate(tile.screen, tile.params);
+    } else {
+      navigation.navigate(tile.screen);
     }
-    if (
-      parentId === 11 ||
-      name.includes('sales') ||
-      name.includes('lead') ||
-      name.includes('quotation') ||
-      name.includes('quatation')
-    ) {
-      return 'Sales';
-    }
-    if (
-      parentId === 19 ||
-      name.includes('credit') ||
-      name.includes('transaction') ||
-      act.includes('transaction') ||
-      name.includes('collection') ||
-      act.includes('credit') ||
-      item.menuID === 60 ||
-      item.menuID === 58 ||
-      item.menuID === 20 ||
-      item.menuID === 62
-    ) {
-      return 'Credit';
-    }
-    if (parentId === 64 || name.includes('messaging') || name.includes('whatapp') || name.includes('sms')) {
-      return 'Bulk Messaging';
-    }
-    if (parentId === 65 || name.includes('template')) {
-      return 'Templates';
-    }
-    return 'Other';
-  };
-
-  // Determine the exact Module Name for each tile (e.g. Admin Masters, Sales, Credit, Bulk Messaging, Templates)
-  const getModuleName = (item: MenuItemData): string => {
-    const nameLower = (item.menuName || '').toLowerCase().trim();
-    const actLower = (item.action || '').toLowerCase().trim();
-
-    if (
-      item.menuID === 10 ||
-      item.menuID === 9 ||
-      item.menuID === 99 ||
-      nameLower.includes('user master') ||
-      nameLower.includes('company') ||
-      nameLower.includes('user permission') ||
-      nameLower.includes('permission') ||
-      nameLower.includes('permision')
-    ) {
-      return 'Admin Masters';
-    }
-
-    if (
-      item.parentID === 19 ||
-      nameLower.includes('new transaction') ||
-      actLower.includes('new-transaction') ||
-      actLower.includes('newtransaction') ||
-      nameLower.includes('credit master') ||
-      nameLower.includes('payment collection') ||
-      nameLower.includes('credit reminder') ||
-      item.menuID === 60 ||
-      item.menuID === 58 ||
-      item.menuID === 20 ||
-      item.menuID === 62
-    ) {
-      return 'Credit';
-    }
-
-    if (
-      item.parentID === 11 ||
-      nameLower.includes('add lead') ||
-      nameLower.includes('quotation') ||
-      nameLower.includes('quatation') ||
-      nameLower.includes('update contact') ||
-      nameLower.includes('sales reminder') ||
-      item.menuID === 12 ||
-      item.menuID === 39 ||
-      item.menuID === 27 ||
-      item.menuID === 77
-    ) {
-      return 'Sales';
-    }
-
-    if (item.parentID && item.parentID > 0) {
-      const parent = menus.find((m) => m.menuID === item.parentID);
-      if (parent && parent.menuName) {
-        return parent.menuName;
-      }
-    }
-    if (item.parentID === 64) return 'Bulk Messaging';
-    if (item.parentID === 65) return 'Templates';
-
-    return getCategoryForMenu(item);
-  };
-
-  // All actionable buttons that will be displayed as tiles (strictly authorized only)
-  const allActionableButtons = useMemo(() => {
-    return menus.filter((m) => {
-      if (isExcludedMenu(m)) return false;
-      if (!authorizedMenuIds.has(m.menuID)) return false;
-      const hasChildren = menus.some((child) => child.parentID === m.menuID && !isExcludedMenu(child));
-      // Pure module container roots that only hold children (like Sales, Credit, Bulk Messaging, Templates)
-      // are not leaf tiles because their submenus render as tiles under their section!
-      if (hasChildren) return false;
-      return true;
-    });
-  }, [menus, authorizedMenuIds]);
-
-  // Group tiles into module sections (Admin Masters at top, Sales, Credit, Bulk Messaging, Templates)
-  const moduleSections = useMemo((): ModuleSection[] => {
-    const sectionConfig: {
-      id: string;
-      moduleName: string;
-      icon: keyof typeof Ionicons.glyphMap;
-      themeKey: string;
-      isFiveTileRow?: boolean;
-    }[] = [
-      { id: 'Admin Masters', moduleName: 'Admin Masters', icon: 'shield-checkmark', themeKey: 'Admin Masters' },
-      { id: 'Sales', moduleName: 'Sales', icon: 'funnel', themeKey: 'Sales' },
-      { id: 'Credit', moduleName: 'Credit', icon: 'card', themeKey: 'Credit' },
-      { id: 'Bulk Messaging', moduleName: 'Bulk Messaging', icon: 'repeat', themeKey: 'Bulk Messaging', isFiveTileRow: true },
-      { id: 'Templates', moduleName: 'Templates', icon: 'list', themeKey: 'Templates', isFiveTileRow: true },
-    ];
-
-    const buckets: Record<string, MenuItemData[]> = {
-      'Admin Masters': [],
-      Sales: [],
-      Credit: [],
-      'Bulk Messaging': [],
-      Templates: [],
-    };
-
-    allActionableButtons.forEach((item) => {
-      const mod = getModuleName(item);
-      if (mod === 'Admin Masters') {
-        buckets['Admin Masters'].push(item);
-      } else if (mod === 'Sales') {
-        buckets.Sales.push(item);
-      } else if (mod === 'Credit') {
-        buckets.Credit.push(item);
-      } else if (mod === 'Bulk Messaging') {
-        buckets['Bulk Messaging'].push(item);
-      } else if (mod === 'Templates') {
-        buckets.Templates.push(item);
-      }
-    });
-
-    // Explicit 3 tiles for Admin Masters: 1. Company Master, 2. User Master, 3. User Permission
-    const mandatoryAdminTiles: MenuItemData[] = [
-      { menuID: 9, menuOrderID: 1, menuName: 'Company Master', action: '/company', icon: 'bi bi-buildings', parentID: 0 },
-      { menuID: 10, menuOrderID: 2, menuName: 'User Master', action: '/users', icon: 'bi bi-people', parentID: 0 },
-      { menuID: 99, menuOrderID: 3, menuName: 'User Permission', action: '/user-permission', icon: 'bi bi-shield-lock', parentID: 0 },
-    ];
-    const allowedAdminTiles = mandatoryAdminTiles.filter((t) => authorizedMenuIds.has(t.menuID));
-    buckets['Admin Masters'] = allowedAdminTiles.map((req) => {
-      const match = buckets['Admin Masters'].find(
-        (m) =>
-          m.menuID === req.menuID ||
-          m.menuName.toLowerCase().trim() === req.menuName.toLowerCase().trim() ||
-          (req.menuName === 'Company Master' && m.menuName.toLowerCase().includes('company')) ||
-          (req.menuName === 'User Master' && m.menuName.toLowerCase().includes('user master')) ||
-          (req.menuName === 'User Permission' &&
-            (m.menuName.toLowerCase().includes('permission') ||
-              m.menuName.toLowerCase().includes('permision') ||
-              (m.action && m.action.toLowerCase().includes('user-permission'))))
-      );
-      if (match) {
-        return {
-          ...match,
-          menuName: req.menuName,
-          icon: req.icon,
-          action: req.action,
-        };
-      }
-      return req;
-    });
-
-    // Explicit 4 tiles for Sales: 1. Add Lead -> 2. Quotation List -> 3. Update Contact -> 4. Sales Reminder
-    const mandatorySalesTiles: MenuItemData[] = [
-      { menuID: 12, menuOrderID: 1, menuName: 'Add Lead', action: '/sales/leads', icon: 'bi-person-plus', parentID: 11 },
-      { menuID: 39, menuOrderID: 2, menuName: 'Quotation List', action: 'sales/Quatation', icon: 'bi bi-card-checklist', parentID: 11 },
-      { menuID: 27, menuOrderID: 3, menuName: 'Update Contact', action: 'sales/contacts', icon: 'bi bi-people', parentID: 11 },
-      { menuID: 77, menuOrderID: 4, menuName: 'Sales Reminder', action: 'sales/SalesReminder', icon: 'bi bi-sliders', parentID: 11 },
-    ];
-    const allowedSalesTiles = mandatorySalesTiles.filter((t) => authorizedMenuIds.has(t.menuID));
-    buckets.Sales = allowedSalesTiles.map((req) => {
-      const match = buckets.Sales.find(
-        (m) =>
-          m.menuID === req.menuID ||
-          m.menuName.toLowerCase().trim() === req.menuName.toLowerCase().trim() ||
-          (req.menuName === 'Quotation List' && m.menuName.toLowerCase().includes('quotation')) ||
-          (req.menuName === 'Update Contact' && m.menuName.toLowerCase().includes('contact')) ||
-          (req.menuName === 'Sales Reminder' && m.menuName.toLowerCase().includes('reminder'))
-      );
-      if (match) {
-        return {
-          ...match,
-          menuName: req.menuName,
-          icon: req.icon,
-        };
-      }
-      return req;
-    });
-
-    // Explicit 4 tiles for Credit: 1. Credit Master -> 2. New Transaction -> 3. Payment Collection -> 4. Credit Reminder
-    const mandatoryCreditTiles: MenuItemData[] = [
-      { menuID: 58, menuOrderID: 1, menuName: 'Credit Master', action: 'credit-mgm/credit-master', icon: 'bi bi-credit-card', parentID: 19 },
-      { menuID: 60, menuOrderID: 2, menuName: 'New Transaction', action: 'credit-mgm/new-transaction', icon: 'bi-plus-square', parentID: 19 },
-      { menuID: 20, menuOrderID: 3, menuName: 'Payment Collection', action: 'credit-mgm/payment-collection', icon: 'bi bi-box-arrow-in-down', parentID: 19 },
-      { menuID: 62, menuOrderID: 4, menuName: 'Credit Reminder', action: '/credit-mgm/reminder-setting', icon: 'bi bi-sliders', parentID: 19 },
-    ];
-    const allowedCreditTiles = mandatoryCreditTiles.filter((t) => authorizedMenuIds.has(t.menuID));
-    buckets.Credit = allowedCreditTiles.map((req) => {
-      const match = buckets.Credit.find(
-        (m) =>
-          m.menuID === req.menuID ||
-          m.menuName.toLowerCase().trim() === req.menuName.toLowerCase().trim() ||
-          (req.menuName === 'New Transaction' &&
-            (m.menuName.toLowerCase().includes('transaction') ||
-              (m.action && m.action.toLowerCase().includes('transaction')))) ||
-          (req.menuName === 'Credit Master' && m.menuName.toLowerCase().includes('credit master')) ||
-          (req.menuName === 'Payment Collection' && m.menuName.toLowerCase().includes('collection')) ||
-          (req.menuName === 'Credit Reminder' && m.menuName.toLowerCase().includes('reminder'))
-      );
-      if (match) {
-        return {
-          ...match,
-          menuName: req.menuName,
-          icon: req.icon,
-        };
-      }
-      return req;
-    });
-
-    // Explicit 5 tiles for Bulk Messaging
-    const mandatoryBulkTiles: MenuItemData[] = [
-      { menuID: 50, menuOrderID: 1, menuName: 'Text SMS', action: 'BulkMessaging/TextMsg', icon: 'bi bi-chat-text', parentID: 64 },
-      { menuID: 55, menuOrderID: 2, menuName: 'WhatsApp', action: 'BulkMessaging/Whatapp', icon: 'bi bi-whatsapp', parentID: 64 },
-      { menuID: 56, menuOrderID: 3, menuName: 'Email', action: 'BulkMessaging/Email', icon: 'bi bi-envelope-open', parentID: 64 },
-      { menuID: 66, menuOrderID: 4, menuName: 'Voice Call', action: 'BulkMessaging/VoiceCall', icon: 'bi bi-telephone', parentID: 64 },
-      { menuID: 67, menuOrderID: 5, menuName: 'RCS', action: 'BulkMessaging/RCSMsg', icon: 'bi bi-chat-dots', parentID: 64 },
-    ];
-    const allowedBulkTiles = mandatoryBulkTiles.filter((t) => authorizedMenuIds.has(t.menuID));
-    buckets['Bulk Messaging'] = allowedBulkTiles.map((req) => {
-      const match = buckets['Bulk Messaging'].find(
-        (m) =>
-          m.menuID === req.menuID ||
-          m.menuName.toLowerCase().trim() === req.menuName.toLowerCase().trim() ||
-          (req.menuName === 'Text SMS' && m.menuName.toLowerCase().includes('sms')) ||
-          (req.menuName === 'WhatsApp' && (m.menuName.toLowerCase().includes('whatsapp') || m.menuName.toLowerCase().includes('whatapp'))) ||
-          (req.menuName === 'Email' && m.menuName.toLowerCase().includes('email')) ||
-          (req.menuName === 'Voice Call' && m.menuName.toLowerCase().includes('voice')) ||
-          (req.menuName === 'RCS' && m.menuName.toLowerCase().includes('rcs'))
-      );
-      if (match) {
-        return {
-          ...match,
-          menuName: req.menuName,
-          icon: req.icon,
-        };
-      }
-      return req;
-    });
-
-    // Explicit 5 tiles for Templates
-    const mandatoryTemplateTiles: MenuItemData[] = [
-      { menuID: 70, menuOrderID: 1, menuName: 'Text SMS', action: 'Templates/TextMsgTemplates', icon: 'bi bi-chat-text', parentID: 65 },
-      { menuID: 72, menuOrderID: 2, menuName: 'WhatsApp', action: 'Templates/WhatappTemplates', icon: 'bi bi-whatsapp', parentID: 65 },
-      { menuID: 73, menuOrderID: 3, menuName: 'Email', action: 'Templates/EmailTemplates', icon: 'bi bi-envelope-open', parentID: 65 },
-      { menuID: 69, menuOrderID: 4, menuName: 'Voice Call', action: 'Templates/VoiceCallTemplates', icon: 'bi bi-telephone', parentID: 65 },
-      { menuID: 71, menuOrderID: 5, menuName: 'RCS', action: 'Templates/RCSMsgTemplates', icon: 'bi bi-chat-dots', parentID: 65 },
-    ];
-    const allowedTemplateTiles = mandatoryTemplateTiles.filter((t) => authorizedMenuIds.has(t.menuID));
-    buckets.Templates = allowedTemplateTiles.map((req) => {
-      const match = buckets.Templates.find(
-        (m) =>
-          m.menuID === req.menuID ||
-          m.menuName.toLowerCase().trim() === req.menuName.toLowerCase().trim() ||
-          (req.menuName === 'Text SMS' && m.menuName.toLowerCase().includes('sms')) ||
-          (req.menuName === 'WhatsApp' && (m.menuName.toLowerCase().includes('whatsapp') || m.menuName.toLowerCase().includes('whatapp'))) ||
-          (req.menuName === 'Email' && m.menuName.toLowerCase().includes('email')) ||
-          (req.menuName === 'Voice Call' && m.menuName.toLowerCase().includes('voice')) ||
-          (req.menuName === 'RCS' && m.menuName.toLowerCase().includes('rcs'))
-      );
-      if (match) {
-        return {
-          ...match,
-          menuName: req.menuName,
-          icon: req.icon,
-        };
-      }
-      return req;
-    });
-
-    const q = search.trim().toLowerCase();
-
-    return sectionConfig
-      .map((cfg) => {
-        let items = buckets[cfg.id] || [];
-        if (q) {
-          items = items.filter(
-            (m) =>
-              m.menuName.toLowerCase().includes(q) ||
-              cfg.moduleName.toLowerCase().includes(q) ||
-              (m.action && m.action.toLowerCase().includes(q))
-          );
-        }
-        return {
-          id: cfg.id,
-          moduleName: cfg.moduleName,
-          icon: cfg.icon,
-          theme: CATEGORY_COLORS[cfg.themeKey] || CATEGORY_COLORS.Other,
-          isFiveTileRow: cfg.isFiveTileRow,
-          items,
-        };
-      })
-      .filter((sec) => sec.items.length > 0);
-  }, [allActionableButtons, search, menus, authorizedMenuIds]);
-
-  const handleMenuPress = (item: MenuItemData) => {
-    const target = getNavigationTarget(item.action, item.menuName);
-    navigation.navigate(target.screen, target.params);
   };
 
   const handleLogout = () => {
@@ -940,6 +757,7 @@ export const MoreScreen: React.FC<MoreScreenProps> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* App Header with 'Menu' title */}
       <Header title="Menu" showBack={false} currentRoute="MoreTab" />
 
       <ScrollView
@@ -947,94 +765,62 @@ export const MoreScreen: React.FC<MoreScreenProps> = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Search Bar */}
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={18} color="#94a3b8" style={{ marginRight: 8 }} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search menus (e.g. Lead, Quotation, Task)..."
-            placeholderTextColor="#94a3b8"
-            value={search}
-            onChangeText={setSearch}
-          />
-          {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={18} color="#94a3b8" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        {/* Grouped Module Sections (Top heading: Sales, etc. with 3 tiles in 1 row) */}
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="small" color="#645695" />
-            <Text style={styles.loadingText}>Syncing TSI_CRM Menus...</Text>
+            <Text style={styles.loadingText}>Loading dynamic menus...</Text>
           </View>
-        ) : moduleSections.length === 0 ? (
+        ) : authorizedSections.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Ionicons name={search ? "search-outline" : "shield-outline"} size={38} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>{search ? "No Menus Found" : "No Menus Assigned"}</Text>
+            <Ionicons name="shield-outline" size={38} color="#cbd5e1" />
+            <Text style={styles.emptyTitle}>No Menus Assigned</Text>
             <Text style={styles.emptySubtitle}>
-              {search
-                ? "Try changing your search query."
-                : "No menu permissions have been assigned to your account yet. Please contact your administrator."}
+              No menu permissions have been assigned to your account yet. Please contact your administrator.
             </Text>
-            {search ? (
-              <TouchableOpacity style={styles.clearFilterBtn} onPress={() => setSearch('')}>
-                <Text style={styles.clearFilterBtnText}>Clear Search</Text>
-              </TouchableOpacity>
-            ) : null}
           </View>
         ) : (
-          moduleSections.map((section) => (
+          authorizedSections.map((section) => (
             <View key={section.id} style={styles.sectionBlock}>
-              {/* Module Heading: e.g. SALES */}
+              {/* Module Header */}
               <View style={styles.sectionHeader}>
-                <View style={[styles.sectionHeaderIconBox, { backgroundColor: section.theme.bg }]}>
-                  <Ionicons name={section.icon} size={15} color={section.theme.color} />
+                <View style={styles.sectionHeaderIconBox}>
+                  <Ionicons name={section.icon} size={15} color="#645695" />
                 </View>
                 <Text style={styles.sectionHeadingTitle}>{section.moduleName}</Text>
               </View>
 
-              {/* Tiles Row: 5 tiles in 1 row for Bulk Messaging and Templates, standard for others */}
-              <View style={section.isFiveTileRow ? styles.fiveTilesRow : styles.sectionTilesRow}>
-                {section.items.map((item) => {
-                  const ionicIcon = mapBootstrapIconToIonic(item.icon, item.menuName);
-
-                  return (
-                    <TouchableOpacity
-                      key={`tile-${item.menuID}-${item.menuName}`}
-                      style={section.isFiveTileRow ? styles.gridTileFive : styles.gridTile}
-                      onPress={() => handleMenuPress(item)}
-                      activeOpacity={0.7}
+              {/* Module Tiles */}
+              <View style={section.isFiveTileRow ? styles.fiveTilesRow : styles.standardTilesRow}>
+                {section.tiles.map((tile) => (
+                  <TouchableOpacity
+                    key={tile.key}
+                    style={section.isFiveTileRow ? styles.gridTileFive : styles.gridTileStandard}
+                    onPress={() => handleTilePress(tile)}
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      style={section.isFiveTileRow ? styles.tileIconBoxFive : styles.tileIconBoxStandard}
                     >
-                      <View
-                        style={[
-                          section.isFiveTileRow ? styles.tileIconBoxFive : styles.tileIconBox,
-                          { backgroundColor: section.theme.bg },
-                        ]}
-                      >
-                        <Ionicons
-                          name={ionicIcon}
-                          size={section.isFiveTileRow ? 17 : 19}
-                          color={section.theme.color}
-                        />
-                      </View>
-                      <Text
-                        style={section.isFiveTileRow ? styles.tileMenuNameFive : styles.tileMenuName}
-                        numberOfLines={2}
-                      >
-                        {item.menuName}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                      <Ionicons
+                        name={tile.icon}
+                        size={section.isFiveTileRow ? 17 : 19}
+                        color="#645695"
+                      />
+                    </View>
+                    <Text
+                      style={section.isFiveTileRow ? styles.tileMenuNameFive : styles.tileMenuNameStandard}
+                      numberOfLines={2}
+                    >
+                      {tile.menuName}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
           ))
         )}
 
-        {/* Logout Button */}
+        {/* Log Out Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
           <Ionicons name="log-out-outline" size={18} color="#dc2626" />
           <Text style={styles.logoutText}>Log Out</Text>
@@ -1047,95 +833,21 @@ export const MoreScreen: React.FC<MoreScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffff',
   },
   scrollArea: {
     flex: 1,
   },
   scrollContent: {
-    padding: 10,
-    paddingBottom: 40,
-  },
-  userCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#645695',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  userAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#645695',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  userAvatarText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1e293b',
-  },
-  userRole: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 1,
-  },
-  companyTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(100, 86, 149, 0.08)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-    gap: 4,
-  },
-  companyTagText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#645695',
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    marginBottom: 16,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#1e293b',
-    padding: 0,
+    paddingTop: 14,
+    paddingBottom: 40,
   },
   loadingBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: 30,
     gap: 8,
   },
   loadingText: {
@@ -1144,7 +856,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sectionBlock: {
-    marginBottom: 18,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1157,41 +869,33 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 8,
+    backgroundColor: '#ede9fe',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sectionHeadingTitle: {
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: '800',
     color: '#1e293b',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
-  sectionCountBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 1.5,
-    borderRadius: 10,
-  },
-  sectionCountText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  sectionTilesRow: {
+  standardTilesRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
   },
   fiveTilesRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
     justifyContent: 'space-between',
-    gap: 4,
+    gap: 5,
   },
-  gridTile: {
-    width: '23.4%',
+  gridTileStandard: {
+    width: '22.8%',
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 3,
+    paddingVertical: 12,
+    paddingHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1207,8 +911,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
     borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 1,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1218,26 +922,28 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 3,
     elevation: 1,
-    minHeight: 76,
+    minHeight: 78,
   },
-  tileIconBox: {
+  tileIconBoxStandard: {
     width: 38,
     height: 38,
     borderRadius: 10,
+    backgroundColor: '#ede9fe',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 7,
   },
   tileIconBoxFive: {
     width: 32,
     height: 32,
     borderRadius: 8,
+    backgroundColor: '#ede9fe',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 5,
   },
-  tileMenuName: {
-    fontSize: 10,
+  tileMenuNameStandard: {
+    fontSize: 10.5,
     fontWeight: '700',
     color: '#1e293b',
     textAlign: 'center',
@@ -1253,7 +959,7 @@ const styles = StyleSheet.create({
   emptyBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 36,
+    paddingVertical: 40,
     paddingHorizontal: 20,
     backgroundColor: '#ffffff',
     borderRadius: 16,
@@ -1272,29 +978,19 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     textAlign: 'center',
     marginTop: 4,
-    marginBottom: 14,
-  },
-  clearFilterBtn: {
-    backgroundColor: '#645695',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  clearFilterBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
+    lineHeight: 18,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
+    backgroundColor: '#ffffff',
+    borderWidth: 1.2,
+    borderColor: '#fca5a5',
     borderRadius: 12,
     paddingVertical: 13,
-    marginTop: 10,
+    marginTop: 8,
+    marginBottom: 16,
     gap: 8,
   },
   logoutText: {
@@ -1303,4 +999,3 @@ const styles = StyleSheet.create({
     color: '#dc2626',
   },
 });
-

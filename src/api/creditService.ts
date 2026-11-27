@@ -151,15 +151,24 @@ uploadTransactionAttachment: async (
       type: file.mimeType || 'application/octet-stream',
     } as any);
 
-    const response = await apiClient.post(
-    `/MobileAttachment/${objType}/${documentId}`,
-      formData,
-      {
+    let response: any;
+    try {
+      response = await apiClient.post(`/Attachment/${objType}/${documentId}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+      });
+    } catch (attachErr: any) {
+      if (attachErr?.response?.status === 404) {
+        response = await apiClient.post(`/MobileAttachment/${objType}/${documentId}`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+      } else {
+        throw attachErr;
       }
-    );
+    }
 
     return response.data;
   } catch (err) {
@@ -167,6 +176,56 @@ uploadTransactionAttachment: async (
     throw err;
   }
 },
+
+  // GET DOCUMENT ATTACHMENTS (Supports all doc types)
+  getTransactionAttachments: async (
+    objType: number,
+    documentId: number
+  ): Promise<any[]> => {
+    try {
+      if (!documentId || documentId <= 0) return [];
+      let response: any;
+      try {
+        response = await apiClient.get(`/MobileAttachment/${objType}/${documentId}`);
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
+          try {
+            response = await apiClient.get(`/Attachment/${objType}/${documentId}`);
+          } catch {
+            response = await apiClient.get(`/MobileAttachment/document/${documentId}`);
+          }
+        } else {
+          try {
+            response = await apiClient.get(`/Attachment/${objType}/${documentId}`);
+          } catch {
+            response = null;
+          }
+        }
+      }
+
+      if (response && response.data) {
+        if (Array.isArray(response.data)) return response.data;
+        if (Array.isArray(response.data.data)) return response.data.data;
+        if (Array.isArray(response.data.items)) return response.data.items;
+      }
+
+      // If nothing returned with objType, try documentId fallback
+      if (documentId > 0) {
+        try {
+          const fallbackRes = await apiClient.get(`/MobileAttachment/document/${documentId}`);
+          if (fallbackRes && fallbackRes.data) {
+            if (Array.isArray(fallbackRes.data)) return fallbackRes.data;
+            if (Array.isArray(fallbackRes.data.data)) return fallbackRes.data.data;
+          }
+        } catch { }
+      }
+
+      return [];
+    } catch (err) {
+      console.warn('Error fetching transaction attachments:', err);
+      return [];
+    }
+  },
 
   // GET ALL CREDIT PROFILES
   getAllCreditProfiles: async (companyId?: number, search?: string): Promise<any[]> => {
@@ -565,20 +624,18 @@ uploadTransactionAttachment: async (
         const totalCustomers = Number(stats.totalCustomers ?? response.data.topCreditCustomers?.length ?? 0);
         const highRiskCustomers = Number(stats.highRiskCustomers ?? 0);
 
-        if (totalOutstanding > 0 || collectedThisMonth > 0 || totalCustomers > 0 || totalOverdue > 0 || highRiskCustomers > 0) {
-          return {
-            totalOutstanding,
-            totalOverdue,
-            collectedThisMonth,
-            targetCollection,
-            totalCustomers,
-            highRiskCustomers,
-            aging0to30: Number(stats.aging0to30 ?? stats.days30 ?? 0),
-            aging31to60: Number(stats.aging31to60 ?? stats.days60 ?? 0),
-            aging61to90: Number(stats.aging61to90 ?? stats.days90 ?? 0),
-            aging90Plus: Number(stats.aging90Plus ?? stats.days120 ?? 0),
-          };
-        }
+        return {
+          totalOutstanding,
+          totalOverdue,
+          collectedThisMonth,
+          targetCollection,
+          totalCustomers,
+          highRiskCustomers,
+          aging0to30: Number(stats.aging0to30 ?? stats.days30 ?? 0),
+          aging31to60: Number(stats.aging31to60 ?? stats.days60 ?? 0),
+          aging61to90: Number(stats.aging61to90 ?? stats.days90 ?? 0),
+          aging90Plus: Number(stats.aging90Plus ?? stats.days120 ?? 0),
+        };
       }
 
       // Live Fallback: Calculate metrics dynamically from actual credit customers & invoices in database

@@ -285,4 +285,40 @@ export const mastersService = {
     }
     return [];
   },
+
+  // Dynamically get Document ObjTypes from database Menu table (/Menu/by-parent/60 and /Menu/doc-types)
+  getMenuDocTypes: async (parentId: number = 60): Promise<{ menuID: number; menuName: string; parentID: number; objType: number }[]> => {
+    try {
+      // 1. First attempt: /Menu/by-parent/{parentId} (returns submenus directly from Menu table in database)
+      try {
+        const res = await apiClient.get(`/Menu/by-parent/${parentId}`);
+        const raw = Array.isArray(res.data) ? res.data : (res.data?.data || res.data?.value || []);
+        if (Array.isArray(raw) && raw.length > 0) {
+          return raw.map((m: any) => ({
+            menuID: Number(m.menuID || m.MenuID),
+            menuName: String(m.menuName || m.MenuName || ''),
+            parentID: Number(m.parentID || m.ParentID || parentId),
+            objType: Number(m.objType || m.ObjType || 0),
+          }));
+        }
+      } catch (parentErr) {
+        // Fallback to /Menu/doc-types
+      }
+
+      // 2. Fallback: /Menu/doc-types (queries Menu table WHERE ObjType IS NOT NULL)
+      const docRes = await apiClient.get('/Menu/doc-types');
+      const rawDocs = Array.isArray(docRes.data) ? docRes.data : (docRes.data?.data || docRes.data?.value || []);
+      if (Array.isArray(rawDocs) && rawDocs.length > 0) {
+        return rawDocs.map((m: any) => ({
+          menuID: Number(m.menuID || m.MenuID),
+          menuName: String(m.menuName || m.MenuName || ''),
+          parentID: Number(m.parentID || m.ParentID || 0),
+          objType: Number(m.objType || m.ObjType || 0),
+        }));
+      }
+    } catch (err) {
+      console.warn('Error fetching Menu ObjTypes from database Menu table:', err);
+    }
+    return [];
+  },
 };

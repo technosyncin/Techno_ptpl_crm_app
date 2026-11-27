@@ -567,9 +567,9 @@ const handleResetForm = () => {
               />
               {showMobileSuggestions && mobileSuggestions.length > 0 && (
               <View style={styles.suggestionContainer}>
-                {mobileSuggestions.map((item) => (
+                {mobileSuggestions.map((item, idx) => (
                   <TouchableOpacity
-                    key={item.leadID}
+                    key={`mob-sug-${item.leadID || ''}-${idx}`}
                     style={styles.suggestionItem}
                     onPress={() => handleSelectMobileSuggestion(item)}
                   >
@@ -721,7 +721,7 @@ const handleResetForm = () => {
           {/* Leads FlatList */}
           <FlatList
             data={leads}
-            keyExtractor={(item) => String(item.leadID)}
+            keyExtractor={(item, index) => `${item.leadID || 'lead'}-${index}`}
             renderItem={({ item }) => (
               <LeadCard
                 lead={item}

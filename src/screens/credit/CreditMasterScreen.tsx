@@ -629,7 +629,7 @@ export const CreditMasterScreen: React.FC<CreditMasterScreenProps> = ({
       ) : (
         <FlatList
           data={filteredItems}
-          keyExtractor={(item) => String(item.leadId)}
+          keyExtractor={(item, index) => `${item.leadId || 'lead'}-${index}`}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -753,7 +753,9 @@ export const CreditMasterScreen: React.FC<CreditMasterScreenProps> = ({
         visible={modalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => !saving && setModalVisible(false)}
+        onRequestClose={() => {
+          if (!saving) setModalVisible(false);
+        }}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}

@@ -84,6 +84,10 @@ export const ContactsListScreen: React.FC<ContactsListScreenProps> = ({
 // FETCH CONTACTS
 // ============================================================
 
+// ============================================================
+// FETCH CONTACTS
+// ============================================================
+
 const fetchContacts = useCallback(
   async (page = 1, isRefresh = false) => {
     if (isRefresh) {
@@ -102,15 +106,16 @@ const fetchContacts = useCallback(
 
       console.log('CONTACT API RESPONSE:', res);
 
-      // API PascalCase -> React Native camelCase
       const normalizedContacts = (res.data || []).map(
         (item: any) => ({
           ...item,
 
+          // Contact ID
           contactID: Number(
-            item.ContactID ?? item.contactID ?? 0
+            item.ContactID ?? item.contactID ?? item.id ?? 0
           ),
 
+          // Contact Name
           fullName:
             item.FullName ??
             item.fullName ??
@@ -118,6 +123,14 @@ const fetchContacts = useCallback(
             item.contactName ??
             '',
 
+          contactName:
+            item.ContactName ??
+            item.contactName ??
+            item.FullName ??
+            item.fullName ??
+            '',
+
+          // Company Details
           companyID:
             item.CompanyID ?? item.companyID,
 
@@ -126,11 +139,13 @@ const fetchContacts = useCallback(
             item.companyName ??
             '',
 
+          // Status
           status:
             item.Status ??
             item.status ??
             'Active',
 
+          // Contact Details
           contactNumber:
             item.ContactNumber ??
             item.contactNumber ??
@@ -144,6 +159,37 @@ const fetchContacts = useCallback(
             item.email ??
             '',
 
+          position:
+            item.Position ??
+            item.position ??
+            item.Designation ??
+            item.designation ??
+            '',
+
+          // Lead Details
+          leadID:
+            item.LeadID ?? item.leadID,
+
+          leadName:
+            item.LeadName ??
+            item.leadName ??
+            '',
+
+          // Address Details
+          streetName:
+            item.StreetName ??
+            item.streetName ??
+            item.Address ??
+            item.address ??
+            '',
+
+          address:
+            item.Address ??
+            item.address ??
+            item.StreetName ??
+            item.streetName ??
+            '',
+
           city:
             item.City ??
             item.city ??
@@ -154,44 +200,100 @@ const fetchContacts = useCallback(
             item.state ??
             '',
 
-          position:
-            item.Position ??
-            item.position ??
+          pincode:
+            item.Pincode ??
+            item.pincode ??
+            item.PostalCode ??
+            item.postalCode ??
             '',
 
-          leadID:
-            item.LeadID ?? item.leadID,
-
-          leadName:
-            item.LeadName ??
-            item.leadName ??
+          country:
+            item.Country ??
+            item.country ??
             '',
 
+          // Other Details
+          gstNo:
+            item.GSTNo ??
+            item.gstNo ??
+            '',
+
+          panNo:
+            item.PANNo ??
+            item.panNo ??
+            '',
+
+          cinNo:
+            item.CINNo ??
+            item.cinNo ??
+            '',
+
+          aadharNo:
+            item.AadharNo ??
+            item.aadharNo ??
+            item.AdharNo ??
+            item.adharNo ??
+            '',
+
+          // Follow-up Details
           followUpDate:
             item.FollowUpDate ??
             item.followUpDate ??
-            null,
+            '',
 
           followUpTime:
             item.FollowUpTime ??
             item.followUpTime ??
             '',
 
+          combinedFollowUpDateTime:
+            item.CombinedFollowUpDateTime ??
+            item.combinedFollowUpDateTime ??
+            '',
+
+          // Default Contact
           isDefault:
             item.IsDefault ??
             item.isDefault ??
             false,
 
+          isPrimary:
+            item.IsPrimary ??
+            item.isPrimary ??
+            false,
+
+          // Parent Contact
           parentContactID:
             item.ParentContactID ??
             item.parentContactID ??
             null,
+
+          // Created / Updated Details
+          createdBy:
+            item.CreatedBy ??
+            item.createdBy ??
+            null,
+
+          createdDate:
+            item.CreatedDate ??
+            item.createdDate ??
+            '',
+
+          updatedBy:
+            item.UpdatedBy ??
+            item.updatedBy ??
+            null,
+
+          updatedDate:
+            item.UpdatedDate ??
+            item.updatedDate ??
+            '',
         })
       );
 
       console.log(
         'NORMALIZED CONTACTS:',
-        normalizedContacts
+        JSON.stringify(normalizedContacts, null, 2)
       );
 
       setContacts(normalizedContacts as Contact[]);
@@ -200,7 +302,10 @@ const fetchContacts = useCallback(
 
       setTotalPages(res.totalPages || 1);
 
-      setTotalItems(res.total || normalizedContacts.length);
+      setTotalItems(
+        res.total || normalizedContacts.length
+      );
+
     } catch (error: any) {
       console.error(
         'Error fetching contacts:',
@@ -220,7 +325,8 @@ const fetchContacts = useCallback(
   },
   [selectedCompanyId, search]
 );
-  // Reset page when filter changes
+
+ // Reset page when filter changes
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedCompanyId, search]);
@@ -400,7 +506,16 @@ const fetchContacts = useCallback(
     rawName.charAt(0).toUpperCase() + rawName.slice(1);
 
   const avatarInitial =
+  
     displayName.trim().charAt(0).toUpperCase() || '?';
+    const displayAddress = [
+  item.streetName,
+  item.city,
+  item.state,
+  item.pincode,
+]
+  .filter((value: any) => value && String(value).trim() !== '')
+  .join(', ');
 
   return (
    <CommonListCard
@@ -414,6 +529,15 @@ const fetchContacts = useCallback(
     }
 
     avatarText={avatarInitial}
+
+    badgeExtra={
+      item.isDefault ? (
+        <View style={styles.defaultBadge}>
+          <Ionicons name="star" size={10} color="#059669" />
+          <Text style={styles.defaultBadgeText}>DEFAULT</Text>
+        </View>
+      ) : null
+    }
 
     badgeLabel={String(
       item.status || 'ACTIVE'
@@ -437,11 +561,11 @@ const fetchContacts = useCallback(
         icon: 'mail-outline',
         text: item.email,
       },
+      displayAddress && {
+    icon: 'location-outline',
+    text: displayAddress,
+  },
 
-      item.city && {
-        icon: 'location-outline',
-        text: item.city,
-      },
     ].filter(Boolean) as any}
 
     footerIcon={
@@ -589,5 +713,24 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 16,
     paddingBottom: 90,
+  },
+
+  defaultBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    marginLeft: 6,
+    gap: 3,
+  },
+
+  defaultBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#059669',
   },
 });

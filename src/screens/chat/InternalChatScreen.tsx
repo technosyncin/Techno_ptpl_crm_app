@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { useCompany } from '../../context/CompanyContext';
 import { chatService, ChatUser, ChatMessage } from '../../api/chatService';
 import { Colors } from '../../theme/colors';
 
@@ -23,7 +24,10 @@ interface InternalChatScreenProps {
 
 export const InternalChatScreen: React.FC<InternalChatScreenProps> = ({ navigation }) => {
   const { user } = useAuth();
-  const currentUserId: number = user?.id ? Number(user.id) : 1;
+  const { selectedCompanyId, isAllCompanies } = useCompany();
+  const userRole = (user?.role || '').toLowerCase();
+  const isAdmin = userRole.includes('admin') || userRole.includes('super');
+  const currentUserId: number = Number(user?.id || user?.userID || 1);
 
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null);
@@ -36,15 +40,36 @@ export const InternalChatScreen: React.FC<InternalChatScreenProps> = ({ navigati
 
   const flatListRef = useRef<FlatList>(null);
 
-  // 1. Fetch Users List
+  // 1. Fetch Users List (Filtered by Company and Role)
   const fetchUsers = useCallback(async () => {
     try {
-      const data = await chatService.getChatUsers(currentUserId);
-      setUsers(data);
+      const targetCompanyId = isAllCompanies ? 0 : Number(selectedCompanyId || 0);
+      const data = await chatService.getChatUsers(currentUserId, targetCompanyId > 0 ? targetCompanyId : undefined);
+      
+      let list = data || [];
+
+      // 1. Company filter
+      if (!isAllCompanies && targetCompanyId > 0) {
+        list = list.filter((u: any) => {
+          const compId = Number(u.companyID ?? u.companyId ?? 0);
+          return compId === 0 || compId === targetCompanyId;
+        });
+      }
+
+      // 2. Role filter: Admin sees all users, User sees users with whom they have chatted or team members in same company
+      if (!isAdmin && currentUserId) {
+        list = list.filter((u: any) => {
+          const hasChatHistory = Boolean(u.lastMessage || (u.unreadCount && u.unreadCount > 0));
+          const isSameCompany = !targetCompanyId || Number(u.companyID ?? u.companyId ?? 0) === targetCompanyId;
+          return hasChatHistory || isSameCompany;
+        });
+      }
+
+      setUsers(list);
     } catch (e) {
       console.warn('Error loading chat users:', e);
     }
-  }, [currentUserId]);
+  }, [currentUserId, selectedCompanyId, isAllCompanies, isAdmin]);
 
   // 2. Fetch Conversation Messages
   const fetchMessages = useCallback(async (otherUserId: number) => {

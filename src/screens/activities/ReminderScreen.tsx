@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { useCompany } from '../../context/CompanyContext';
 import { reminderService, ReminderItem } from '../../api/reminderService';
 import { MobileDatePicker } from '../../components/common/MobileDatePicker';
 import { Colors } from '../../theme/colors';
@@ -32,6 +33,10 @@ const PRIORITY_OPTIONS = ['HIGH', 'MEDIUM', 'LOW'];
 
 export const ReminderScreen: React.FC<ReminderScreenProps> = ({ navigation }) => {
   const { user } = useAuth();
+  const { selectedCompanyId, isAllCompanies } = useCompany();
+  const userRole = (user?.role || '').toLowerCase();
+  const isAdmin = userRole.includes('admin') || userRole.includes('super');
+  const userId = Number(user?.id || user?.userID);
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,18 +61,38 @@ export const ReminderScreen: React.FC<ReminderScreenProps> = ({ navigation }) =>
   const [occurrences, setOccurrences] = useState<number>(1);
   const [saving, setSaving] = useState(false);
 
-  // Load all reminders directly matching Web CRM
+  // Load reminders (Filtered by Company and Role: Admin = All, User = CreatedBy / UserId)
   const loadReminders = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await reminderService.getAllReminders();
-      setReminders(data);
+      const targetCompanyId = isAllCompanies ? 0 : Number(selectedCompanyId || 0);
+      const data = await reminderService.getAllReminders(targetCompanyId > 0 ? targetCompanyId : undefined);
+
+      let list = data || [];
+
+      // 1. Company filter
+      if (!isAllCompanies && targetCompanyId > 0) {
+        list = list.filter((r: any) => {
+          const compId = Number(r.companyId ?? r.companyID ?? 0);
+          return compId === 0 || compId === targetCompanyId;
+        });
+      }
+
+      // 2. Role filter: Admin = all access, User = createdBy / userId wise
+      if (!isAdmin && userId) {
+        list = list.filter((r: any) => {
+          const creator = Number(r.userId || r.createdBy || r.createdByUserID || r.createdById || 0);
+          return creator === userId;
+        });
+      }
+
+      setReminders(list);
     } catch (err) {
       console.warn('Failed to load reminders:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedCompanyId, isAllCompanies, isAdmin, userId]);
 
   useEffect(() => {
     loadReminders();
@@ -169,8 +194,10 @@ export const ReminderScreen: React.FC<ReminderScreenProps> = ({ navigation }) =>
 
       const payload: Partial<ReminderItem> = {
         reminderId: editId,
-        companyId: 1,
-        userId: currentUserId,
+        companyId: selectedCompanyId || 1,
+        userId: userId || currentUserId,
+        createdBy: userId || currentUserId,
+        createdByUserID: userId || currentUserId,
         title: title.trim(),
         description: description.trim(),
         priorityType: priority,

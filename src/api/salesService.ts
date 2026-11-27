@@ -207,7 +207,7 @@ export const salesService = {
             })
             .map((f: any) => ({
               followUpID: f.lastFollowUpID || f.LastFollowUpID || f.followUpID || f.FollowUpID || f.leadID || f.LeadID || f.id,
-              leadID: f.leadID || f.LeadID,
+              leadID: Number(f.leadID || f.LeadID || f.leadId || f.LeadId || f.id || 0) || undefined,
               leadName: f.leadName || f.LeadName || f.customerName || 'Lead',
               customerName: f.customerName || f.CustomerName || f.leadName || f.LeadName || 'Customer',
               companyName: f.companyName || f.CompanyName || '',

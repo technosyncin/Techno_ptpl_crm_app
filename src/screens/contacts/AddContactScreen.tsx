@@ -243,41 +243,106 @@ export const AddContactScreen: React.FC<AddContactScreenProps> = ({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
+ useEffect(() => {
+  const loadContactDetails = async () => {
     const contactId = Number(
-      editContact?.contactID ||
-        editContact?.id ||
-        editContact?.establishmentID ||
-        0
+      editContact?.contactID ??
+      editContact?.ContactID ??
+      editContact?.id ??
+      editContact?.Id ??
+      0
     );
-    if (isEditing && contactId > 0) {
-      contactService
-        .getContactById(contactId)
-        .then((fullData) => {
-          if (fullData) {
-            if (!leadName && (fullData.leadName || fullData.fullName || fullData.contactName)) {
-              setLeadName(fullData.leadName || fullData.fullName || fullData.contactName || '');
-            }
-            if (!companyName && fullData.companyName) {
-              setCompanyName(fullData.companyName);
-            }
-            if (fullData.city && !city) setCity(fullData.city);
-            if (fullData.state && !state) setState(fullData.state);
-            const fullAddr = fullData.address || fullData.addressLine1 || fullData.streetName;
-            if (fullAddr && !streetName) setStreetName(fullAddr);
-            const fullPin = fullData.pincode || fullData.postalCode;
-            if (fullPin && !pincode) setPincode(fullPin);
-            if (fullData.gstNo && !gstNo) setGstNo(fullData.gstNo);
-            if (fullData.panNo && !panNo) setPanNo(fullData.panNo);
-            if (fullData.cinNo && !cinNo) setCinNo(fullData.cinNo);
-            const fullAadhar = fullData.aadharNo || fullData.adharNo;
-            if (fullAadhar && !adharNo) setAdharNo(fullAadhar);
-          }
-        })
-        .catch((e) => console.warn('Could not load full contact details on mount:', e));
+
+    console.log('EDIT CONTACT ID:', contactId);
+
+    if (!isEditing || contactId <= 0) {
+      console.log('Invalid Contact ID. Contact details not loaded.');
+      return;
     }
-  }, []);
+
+    try {
+      const fullData = await contactService.getContactById(contactId);
+
+      console.log(
+        'EDIT CONTACT FULL DATA:',
+        JSON.stringify(fullData, null, 2)
+      );
+
+      if (!fullData) return;
+
+      // Lead Information
+      setLeadName(fullData.leadName || '');
+      setCompanyName(fullData.companyName || '');
+
+      setStatus(
+        String(fullData.status).toLowerCase() === 'inactive'
+          ? 'inactive'
+          : 'active'
+      );
+
+      // Follow-up
+      const dateValue = fullData.followUpDate || '';
+
+      if (dateValue) {
+        setFollowUpDate(
+          String(dateValue).includes('T')
+            ? String(dateValue).split('T')[0]
+            : String(dateValue).substring(0, 10)
+        );
+      }
+
+      if (fullData.followUpTime) {
+        setFollowUpTime(String(fullData.followUpTime).substring(0, 5));
+      }
+
+      // Fetch child contacts
+      const childContacts =
+        await contactService.getChildContacts(contactId);
+
+      console.log(
+        'EDIT CONTACT CHILD DATA:',
+        JSON.stringify(childContacts, null, 2)
+      );
+
+      // Parent contact + child contacts
+      const allContacts = [fullData, ...childContacts];
+      const hasDefault = allContacts.some((item: any) => Boolean(item.isDefault));
+
+      setContacts(
+        allContacts.map((item: any, index: number) => ({
+          id: index + 1,
+          contactID: Number(item.contactID) || null,
+          fullName: item.fullName || '',
+          contactNumber: item.contactNumber || '',
+          email: item.email || '',
+          position: item.position || '',
+          isDefault: hasDefault ? Boolean(item.isDefault) : index === 0,
+        }))
+      );
+
+      // Address Information
+      setStreetName(fullData.streetName || '');
+      setCity(fullData.city || '');
+      setState(fullData.state || '');
+      setPincode(String(fullData.pincode || ''));
+
+      // Other Details
+      setGstNo(fullData.gstNo || '');
+      setPanNo(fullData.panNo || '');
+      setCinNo(fullData.cinNo || '');
+      setAdharNo(fullData.aadharNo || '');
+
+    } catch (error: any) {
+      console.error('LOAD CONTACT DETAILS ERROR:', error);
+      Alert.alert(
+        'Error',
+        'Unable to load contact details. Please try again.'
+      );
+    }
+  };
+
+  loadContactDetails();
+}, [editContact, isEditing]);
 
   /* ============================================================
    * CONTACT HANDLERS
@@ -291,10 +356,18 @@ export const AddContactScreen: React.FC<AddContactScreenProps> = ({
     const updated = [...contacts];
     updated[index] = { ...updated[index], [field]: value };
 
-    if (field === 'isDefault' && value === true) {
-      updated.forEach((item, i) => {
-        item.isDefault = i === index;
-      });
+    if (field === 'isDefault') {
+      if (value === true) {
+        updated.forEach((item, i) => {
+          item.isDefault = i === index;
+        });
+      } else {
+        const hasOtherDefault = updated.some((item, i) => i !== index && item.isDefault);
+        if (!hasOtherDefault) {
+          updated[index].isDefault = true;
+          return;
+        }
+      }
     }
     setContacts(updated);
   };
@@ -341,17 +414,17 @@ export const AddContactScreen: React.FC<AddContactScreenProps> = ({
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    const firstContact = contacts[0];
+    const defaultContact = contacts.find((c) => c.isDefault) || contacts[0];
 
-    if (!firstContact?.fullName.trim())
-      newErrors.fullName = 'Full Name is required';
+    if (!defaultContact?.fullName?.trim())
+      newErrors.fullName = 'Default Contact Full Name is required';
 
-    if (!firstContact?.contactNumber.trim()) {
-      newErrors.contactNumber = 'Contact Number is required';
+    if (!defaultContact?.contactNumber?.trim()) {
+      newErrors.contactNumber = 'Default Contact Number is required';
     } else {
-      const mobile = firstContact.contactNumber.replace(/[^0-9]/g, '');
+      const mobile = defaultContact.contactNumber.replace(/[^0-9]/g, '');
       if (mobile.length !== 10)
-        newErrors.contactNumber = 'Enter a valid 10-digit number';
+        newErrors.contactNumber = 'Enter a valid 10-digit number for default contact';
     }
 
     if (pincode && !/^[0-9]{6}$/.test(pincode))
@@ -383,88 +456,78 @@ export const AddContactScreen: React.FC<AddContactScreenProps> = ({
 
       const activeLeadId = leadId > 0 ? leadId : 0;
 
-      const contactEstId = Number(
-        editContact?.contactID ||
-          editContact?.id ||
-          editContact?.establishmentID ||
-          0
-      );
+    const contactId = Number(
+  editContact?.contactID ??
+  editContact?.ContactID ??
+  editContact?.id ??
+  0
+);
 
-      const mappedContacts = contacts
-        .filter(
-          (contact) => contact.fullName.trim() || contact.contactNumber.trim()
-        )
-        .map((contact) => {
-          const fullName = contact.fullName.trim();
-          const nameParts = fullName.split(/\s+/);
-          const firstName = nameParts[0] || '';
-          const lastName =
-            nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+const mappedContacts = contacts
+  .filter(
+    (contact) =>
+      contact.fullName.trim() || contact.contactNumber.trim()
+  )
+  .map((contact) => ({
+    contactID: isEditing ? contact.contactID ?? 0 : 0,
+    fullName: contact.fullName.trim(),
+    contactNumber: contact.contactNumber.trim(),
+    email: contact.email.trim(),
+    position: contact.position.trim(),
+    isDefault: contact.isDefault,
+  }));
 
-          return {
-            contactID: isEditing ? contact.contactID || contactEstId : 0,
-            firstName,
-            lastName,
-            fullName,
-            contactNumber: contact.contactNumber.trim(),
-            email: contact.email.trim(),
-            position: contact.position.trim(),
-            isDefault: contact.isDefault,
-          };
-        });
+if (
+  mappedContacts.length > 0 &&
+  !mappedContacts.some((contact) => contact.isDefault)
+) {
+  mappedContacts[0].isDefault = true;
+}
 
-      if (
-        mappedContacts.length > 0 &&
-        !mappedContacts.some((contact) => contact.isDefault)
-      ) {
-        mappedContacts[0].isDefault = true;
-      }
+const defaultContact =
+  mappedContacts.find((contact) => contact.isDefault) || mappedContacts[0];
 
-      const payload = {
-        establishment: {
-          establishmentID: isEditing ? contactEstId : 0,
-          establishmentName: companyName.trim() || leadName.trim(),
-          status: status,
-          companyID: Number(companyId),
-          leadID: activeLeadId || 0,
-          followUpDate: datePart,
-          followUpTime: timePart,
-          combinedFollowUpDateTime: combinedDateTime,
-        },
-        establishmentID: isEditing ? contactEstId : 0,
-        contactID: isEditing ? contactEstId : 0,
-        leadId: activeLeadId,
-        leadName: leadName,
-        companyName: companyName,
-        status: status,
-        companyID: Number(companyId),
-        followUpDate: datePart,
-        followUpTime: timePart,
-        combinedFollowUpDateTime: combinedDateTime,
-        contacts: mappedContacts,
-        address: {
-          addressLine1: streetName.trim(),
-          addressLine2: '',
-          city: city.trim(),
-          state: state.trim(),
-          postalCode: pincode.trim(),
-          country: 'India',
-        },
-        otherDetails: {
-          gstNo: gstNo.trim(),
-          panNo: panNo.trim(),
-          cinNo: cinNo.trim(),
-          adharNo: adharNo.trim(),
-          leadId: activeLeadId,
-        },
-        currentUserId: user?.userID || user?.id || 1,
-      };
+const payload = {
+  contactID: isEditing ? contactId : 0,
 
-      console.log('CONTACT SAVE PAYLOAD:', JSON.stringify(payload, null, 2));
+  companyID: Number(companyId),
+  companyName: companyName.trim(),
+  status: status,
 
-      const response = await contactService.saveAll(payload);
+  leadID: activeLeadId,
 
-      if (response && response.success !== false) {
+  followUpDate: datePart,
+  followUpTime: timePart,
+
+  fullName: defaultContact?.fullName || '',
+  contactNumber: defaultContact?.contactNumber || '',
+  email: defaultContact?.email || '',
+  position: defaultContact?.position || '',
+  isDefault: defaultContact?.isDefault ?? true,
+
+  streetName: streetName.trim(),
+  city: city.trim(),
+  state: state.trim(),
+  pincode: pincode.trim(),
+
+  gstNo: gstNo.trim(),
+  panNo: panNo.trim(),
+  cinNo: cinNo.trim(),
+  aadharNo: adharNo.trim(),
+
+  contacts: mappedContacts,
+
+  currentUserId: user?.userID || user?.id || 1,
+};
+
+console.log(
+  'CONTACT SAVE PAYLOAD:',
+  JSON.stringify(payload, null, 2)
+);
+
+const response = await contactService.saveAll(payload);
+
+if (response && response.success !== false) {
         Alert.alert(
           'Success',
           isEditing
@@ -699,7 +762,7 @@ export const AddContactScreen: React.FC<AddContactScreenProps> = ({
                     }
                     placeholder="Full name"
                   />
-                  {index === 0 && errors.fullName && (
+                  {contact.isDefault && errors.fullName && (
                     <Text style={styles.errorText}>{errors.fullName}</Text>
                   )}
                 </View>
@@ -719,7 +782,7 @@ export const AddContactScreen: React.FC<AddContactScreenProps> = ({
                     placeholder="10-digit"
                     keyboardType="phone-pad"
                   />
-                  {index === 0 && errors.contactNumber && (
+                  {contact.isDefault && errors.contactNumber && (
                     <Text style={styles.errorText}>
                       {errors.contactNumber}
                     </Text>

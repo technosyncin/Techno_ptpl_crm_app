@@ -111,12 +111,13 @@ export const getIonicIconForMenu = (iconClass?: string, menuName?: string): any 
 };
 
 // Helper to build authorized menus and tree
-const processMenuHierarchy = (allMenus: MenuMaster[], isAdmin: boolean) => {
+const processMenuHierarchy = (allMenus: MenuMaster[], _isAdmin?: boolean) => {
   const authSet = new Set<number>();
   const authList: MenuMaster[] = [];
 
   allMenus.forEach((m) => {
-    const isAuth = isAdmin || m.auth === true;
+    // Strictly follow database auth: no admin bypass
+    const isAuth = m.auth === true;
     const isActive = m.isActive !== false;
     if (isAuth && isActive) {
       authSet.add(Number(m.menuID));
@@ -261,10 +262,9 @@ export const MenuProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return role.includes('admin') || role.includes('super');
   }, [user]);
 
-  // Specific module authorization checks matching Web CRM
+  // Specific module authorization checks matching Web CRM (Strict Database Auth)
   const canAccessDashboard = useMemo(() => {
     if (!user) return false;
-    if (isAdmin) return true;
     return authorizedMenus.some(
       (m) =>
         m.menuID === 38 ||
@@ -274,11 +274,10 @@ export const MenuProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (m.action && m.action.toLowerCase().includes('dashboard')) ||
         (m.menuName && m.menuName.toLowerCase().includes('dashboard'))
     );
-  }, [user, isAdmin, authorizedMenus]);
+  }, [user, authorizedMenus]);
 
   const canAccessSales = useMemo(() => {
     if (!user) return false;
-    if (isAdmin) return true;
     return authorizedMenus.some(
       (m) =>
         m.parentID === 11 ||
@@ -293,11 +292,10 @@ export const MenuProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (m.menuName && m.menuName.toLowerCase().includes('sales')) ||
         (m.menuName && m.menuName.toLowerCase().includes('follow-up'))
     );
-  }, [user, isAdmin, authorizedMenus]);
+  }, [user, authorizedMenus]);
 
   const canAccessCredit = useMemo(() => {
     if (!user) return false;
-    if (isAdmin) return true;
     return authorizedMenus.some(
       (m) =>
         m.parentID === 19 ||
@@ -311,11 +309,10 @@ export const MenuProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (m.action && m.action.toLowerCase().includes('recovery')) ||
         (m.menuName && m.menuName.toLowerCase().includes('credit'))
     );
-  }, [user, isAdmin, authorizedMenus]);
+  }, [user, authorizedMenus]);
 
   const canAccessReports = useMemo(() => {
     if (!user) return false;
-    if (isAdmin) return true;
     return authorizedMenus.some(
       (m) =>
         m.parentID === 63 ||
@@ -325,51 +322,58 @@ export const MenuProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (m.action && m.action.toLowerCase().includes('visit')) ||
         (m.menuName && m.menuName.toLowerCase().includes('report'))
     );
-  }, [user, isAdmin, authorizedMenus]);
+  }, [user, authorizedMenus]);
 
   const canAccessMore = useMemo(() => {
     if (!user) return false;
-    if (isAdmin) return true;
     return authorizedMenus.length > 0;
-  }, [user, isAdmin, authorizedMenus]);
+  }, [user, authorizedMenus]);
 
   const canAccessMyTasks = useMemo(() => {
     if (!user) return false;
-    if (isAdmin) return true;
-    return authorizedMenus.some(
+    const match = menus.find(
       (m) =>
         m.menuID === 51 ||
         (m.action && (m.action.toLowerCase().includes('mytask') || m.action.toLowerCase().includes('task'))) ||
         (m.menuName && (m.menuName.toLowerCase().includes('my task') || m.menuName.toLowerCase().includes('task')))
     );
-  }, [user, isAdmin, authorizedMenus]);
+    if (match) {
+      return match.auth === true;
+    }
+    return false;
+  }, [user, menus]);
 
   const canAccessNotes = useMemo(() => {
     if (!user) return false;
-    if (isAdmin) return true;
-    return authorizedMenus.some(
+    const match = menus.find(
       (m) =>
         m.menuID === 68 ||
         (m.action && m.action.toLowerCase().includes('notes')) ||
         (m.menuName && (m.menuName.toLowerCase().includes('notes') || m.menuName.toLowerCase() === 'note'))
     );
-  }, [user, isAdmin, authorizedMenus]);
+    if (match) {
+      return match.auth === true;
+    }
+    return false;
+  }, [user, menus]);
 
   const canAccessCRMInbox = useMemo(() => {
     if (!user) return false;
-    if (isAdmin) return true;
-    return authorizedMenus.some(
+    const match = menus.find(
       (m) =>
         m.menuID === 78 ||
         (m.action && (m.action.toLowerCase().includes('crminbox') || m.action.toLowerCase() === 'chat' || m.action.toLowerCase().includes('inbox'))) ||
         (m.menuName && (m.menuName.toLowerCase().includes('crm inbox') || m.menuName.toLowerCase().includes('inbox') || m.menuName.toLowerCase().includes('chat')))
     );
-  }, [user, isAdmin, authorizedMenus]);
+    if (match) {
+      return match.auth === true;
+    }
+    return false;
+  }, [user, menus]);
 
   const canAccessReminders = useMemo(() => {
     if (!user) return false;
-    if (isAdmin) return true;
-    return authorizedMenus.some(
+    const match = menus.find(
       (m) =>
         m.menuID === 57 ||
         m.menuID === 77 ||
@@ -377,7 +381,11 @@ export const MenuProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (m.action && (m.action.toLowerCase().includes('remainder') || m.action.toLowerCase().includes('reminder'))) ||
         (m.menuName && (m.menuName.toLowerCase().includes('remainder') || m.menuName.toLowerCase().includes('reminder')))
     );
-  }, [user, isAdmin, authorizedMenus]);
+    if (match) {
+      return match.auth === true;
+    }
+    return false;
+  }, [user, menus]);
 
   const canAccessActivities = useMemo(() => {
     return canAccessMyTasks || canAccessNotes || canAccessCRMInbox || canAccessReminders;
@@ -386,8 +394,6 @@ export const MenuProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const hasPermission = useCallback(
     (target: string | number): boolean => {
       if (!user) return false;
-      const role = (user.role || '').toLowerCase();
-      if (role.includes('admin') || role.includes('super')) return true;
 
       if (typeof target === 'number') {
         return authorizedMenuIds.has(target);

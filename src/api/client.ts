@@ -33,7 +33,7 @@ export const setSessionExpiredHandler = (handler: SessionExpiredHandler | null) 
 // ============================================================================
 export type Environment = 'local' | 'test' | 'production';
 
-export const ACTIVE_ENV: Environment = 'production'; // 👈 CHANGE THIS VALUE ('local' | 'test' | 'production')
+export const ACTIVE_ENV: Environment = 'local'; // 👈 CHANGE THIS VALUE ('local' | 'test' | 'production')
 
 export const ENV_ENDPOINTS: Record<Environment, string> = {
   local: 'http://192.168.1.12:5000/api',
@@ -261,6 +261,11 @@ apiClient.interceptors.request.use(
       const sessionToken = await SafeStorage.getItem(STORAGE_KEYS.SESSION_TOKEN);
       if (sessionToken && config.headers) {
         config.headers['X-Session-Token'] = sessionToken;
+      }
+
+      const activeCompId = await SafeStorage.getItem('crm_selected_company_id');
+      if (activeCompId && config.headers) {
+        config.headers['X-Company-Id'] = String(activeCompId);
       }
 
       const userStr = await SafeStorage.getItem(STORAGE_KEYS.USER);
