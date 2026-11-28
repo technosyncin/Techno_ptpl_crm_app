@@ -43,6 +43,15 @@
         "projectId": "dc862dc0-dd1c-4d3e-b240-c957d938b0c4"
       }
     },
-    "owner": "manasi.technosync"
+    "owner": "manasi.technosync",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+   "updates": {
+  "url": "https://u.expo.dev/dc862dc0-dd1c-4d3e-b240-c957d938b0c4",
+  "enabled": true,
+  "checkAutomatically": "ON_LOAD",
+  "fallbackToCacheTimeout": 0
+}
   }
 }
